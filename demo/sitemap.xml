@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>http://127.0.0.1:8765/</loc>
+  </url>
+  <url>
+    <loc>http://127.0.0.1:8765/practice/</loc>
+  </url>
+  <url>
+    <loc>http://127.0.0.1:8765/practice/signal.html</loc>
+  </url>
+  <url>
+    <loc>http://127.0.0.1:8765/practice/nest.html</loc>
+  </url>
+  <url>
+    <loc>http://127.0.0.1:8765/practice/vault.html</loc>
+  </url>
+  <url>
+    <loc>http://127.0.0.1:8765/practice/9v6kph00.html</loc>
+  </url>
+</urlset>

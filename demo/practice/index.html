@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Neon Rook practice hunt — simulated cryptic OSINT for Hunt Engine. Not affiliated with any live contest."
+    />
+    <!-- Live Assets: comments often carry the first hop -->
+    <!-- drop-0: c2lnbmFsLmh0bWw= -->
+    <link rel="canonical" href="http://127.0.0.1:8765/practice/signal.html" />
+    <title>Neon Rook · Practice Hunt</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="practice.css" />
+  </head>
+  <body class="practice">
+    <header class="hero">
+      <p class="eyebrow">Simulated · offline practice</p>
+      <h1>Neon Rook</h1>
+      <p class="lede">
+        A self-contained cryptic OSINT drill. Use Hunt Engine on this origin —
+        pin <code>http://127.0.0.1:8765</code> as hunt base when you find a
+        token. No real contest spoilers live here.
+      </p>
+    </header>
+
+    <main class="stations">
+      <section class="station">
+        <h2>Trailhead</h2>
+        <p>
+          The rook left three kinds of marks: what you see, what the stylesheet
+          hides, and what the markup refuses to say out loud.
+        </p>
+        <p class="ghost-css">
+          Next file on this path: signal.html — same directory as this page.
+        </p>
+        <p class="muted">
+          Zero-width stash (brackets look empty until you inspect):
+          [<span id="zw-host"></span>]
+        </p>
+        <p>
+          Public decoy Base64 (not the hop):
+          <code>TmVvbiBSb29rIHByYWN0aWNl</code>
+        </p>
+      </section>
+
+      <section class="station">
+        <h2>How to play</h2>
+        <ol class="play-steps">
+          <li>Serve with <code>python server.py</code> from the demo folder.</li>
+          <li>Open this page in Firefox with Hunt Engine loaded.</li>
+          <li>Follow clues; probe tokens against the pinned hunt base.</li>
+        </ol>
+        <p class="muted">
+          Soft-404 pages intentionally return HTTP 200 with “not found” body
+          text so you can practice distinguishing hits from misses.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p><a href="/">← Demo arena</a> · Neon Rook practice (original fiction)</p>
+    </footer>
+
+    <script>
+      // Encodes the word "signal" with zero-width joiners between letters.
+      const letters = "signal".split("");
+      const zw = "\u200B";
+      document.getElementById("zw-host").textContent = letters.join(zw);
+    </script>
+  </body>
+</html>

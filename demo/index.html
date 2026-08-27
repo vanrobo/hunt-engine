@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hunt Engine Demo Arena</title>
+    <link rel="canonical" href="http://127.0.0.1:8765/" />
+    <link rel="stylesheet" href="styles.css" />
+    <!-- Stage note: HTML comments are Live Assets targets -->
+    <!-- HINT: the vault passphrase is not in the page title -->
+    <!-- FLAG{comment-layer-alpha} -->
+  </head>
+  <body>
+    <header class="hero">
+      <p class="eyebrow">Local demo · The Hunt Engine</p>
+      <h1>Hunt Arena</h1>
+      <p class="lede">
+        Open the Hunt Engine sidebar, then walk each station below. Every station
+        is designed to light up a different feature.
+      </p>
+      <p class="actions" style="margin-top: 16px">
+        <a class="btn" href="/practice/">Practice Hunt (simulated)</a>
+      </p>
+    </header>
+
+    <main class="stations">
+      <section class="station" id="practice-hunt">
+        <h2>0 · Practice Hunt (simulated)</h2>
+        <p>
+          Full cryptic chain (hidden CSS, comments, Base64/Atbash, image
+          filename token, hunt-base paste probe, soft-404 misses, geohash-lookalike
+          path, redirects, local pin stub). Original fiction — not live contest
+          content.
+        </p>
+        <div class="actions">
+          <a class="btn" href="/practice/">Open Neon Rook</a>
+        </div>
+      </section>
+
+      <section class="station" id="live-assets">
+        <h2>1 · Live Assets</h2>
+        <p>
+          Visible Base64 (padded) sits in this paragraph so the content script
+          can harvest it without DevTools:
+          <code>VGhlIEh1bnQgRW5naW5lIGZvdW5kIG1lIQ==</code>
+        </p>
+        <p>
+          Another payload:
+          <code>Q1RGe2Jhc2U2NC1pbi1wbGFpbi10ZXh0fQ==</code>
+        </p>
+        <p>
+          Flag-shaped string in plain sight:
+          <code>picoCTF{sidebar_sees_flags}</code>
+        </p>
+        <!-- Nested comment clue: rotate the word "vault" with ROT13 -->
+        <p class="muted">
+          Zero-width payload (looks empty between brackets):
+          [<span id="zw-host"></span>]
+        </p>
+      </section>
+
+      <section class="station" id="hidden">
+        <h2>2 · Reveal Hidden Layers</h2>
+        <p>Normal text is visible. Toggle <strong>Reveal Hidden Layers</strong> in the sidebar.</p>
+        <p class="ghost-css">This sentence uses near-white text on white — invisible until reveal.</p>
+        <div class="dark-slab">
+          <p class="sp-hidden">Class .sp-hidden black-on-black stand-in: t^3 is him</p>
+        </div>
+        <p class="ghost-black" style="color:#000000 !important; background:#000000 !important">
+          Black-on-black with !important (the hard case): t^3 is him
+        </p>
+        <p class="ghost-opacity">This sentence is opacity:0 until reveal forces it on.</p>
+        <p hidden>This paragraph uses the HTML hidden attribute.</p>
+        <div class="ghost-visibility">visibility:hidden vault note: neon green means you found me.</div>
+        <p style="color: #ffffff; background: #ffffff; font-size: 1px">
+          Micro text: FLAG{tiny-white-on-white}
+        </p>
+      </section>
+
+      <section class="station" id="redirects">
+        <h2>3 · Redirect Log</h2>
+        <p>Click either bounce path. Watch the Redirect Log fill with the hop chain.</p>
+        <div class="actions">
+          <a class="btn" href="/r/start">HTTP 302 chain (3 hops)</a>
+          <a class="btn ghost" href="meta-hop1.html">Meta-refresh chain</a>
+        </div>
+      </section>
+
+      <section class="station" id="cipher">
+        <h2>4 · Cipher Clipboard</h2>
+        <p>Highlight any sample, right-click → <strong>Send to Hunt Engine</strong>.</p>
+        <ul class="cipher-samples">
+          <li>
+            <span class="label">Base64</span>
+            <code selectable>U2VuZCBtZSB0byBIdW50IEVuZ2luZQ==</code>
+          </li>
+          <li>
+            <span class="label">Hex</span>
+            <code selectable>48 75 6e 74 20 45 6e 67 69 6e 65</code>
+          </li>
+          <li>
+            <span class="label">Octal</span>
+            <code selectable>110 145 154 154 157</code>
+          </li>
+          <li>
+            <span class="label">Decimal</span>
+            <code selectable>72 117 110 116</code>
+          </li>
+          <li>
+            <span class="label">Binary</span>
+            <code selectable>01001000 01101001</code>
+          </li>
+          <li>
+            <span class="label">Ternary</span>
+            <code selectable>11020 10202 11101 10202 11002 10121 11002 11022</code>
+          </li>
+          <li>
+            <span class="label">ROT13</span>
+            <code selectable>Gur Uhag Ratvar</code>
+          </li>
+          <li>
+            <span class="label">ROT47</span>
+            <code selectable>w6==@</code>
+          </li>
+          <li>
+            <span class="label">URL</span>
+            <code selectable>secret%20layer%3A%20unlocked</code>
+          </li>
+          <li>
+            <span class="label">Atbash</span>
+            <code selectable>Gsv Sfmg Vmtrmv</code>
+          </li>
+          <li>
+            <span class="label">Morse</span>
+            <code selectable>.... ..- -. - / . -. --. .. -. .</code>
+          </li>
+        </ul>
+      </section>
+
+      <section class="station" id="iframe">
+        <h2>5 · Nested frame</h2>
+        <p>Clues also hide inside iframes — Live Assets should merge them.</p>
+        <iframe src="frame-clue.html" title="Nested clue frame"></iframe>
+      </section>
+      <section class="station" id="backlinks">
+        <h2>6 · Backlink identifier</h2>
+        <p>
+          How it works: you get a random token, then probe hosts. Try selecting
+          <code>jGJuVGiK</code> → right-click <strong>Probe as Backlink ID</strong>
+          (Pastebin), or <code>690519146701783042</code> (Pinterest pin).
+        </p>
+        <p>Also pin this demo as hunt base to probe <code>/token</code> on this origin.</p>
+        <ul>
+          <li>Token: <code selectable>jGJuVGiK</code></li>
+          <li>Token: <code selectable>690519146701783042</code></li>
+          <li>On-page full URL still listed under Live Assets → Links on page:
+            <a href="https://pastebin.com/jGJuVGiK">pastebin.com/jGJuVGiK</a>
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <p>Serving from <code>127.0.0.1:8765</code> · temporary add-on via about:debugging</p>
+    </footer>
+
+    <script>
+      // Insert zero-width chars so the scanner has something to count.
+      const zw = "\u200B\u200C\u200D\uFEFF";
+      document.getElementById("zw-host").textContent = "secret" + zw + "trail";
+    </script>
+  </body>
+</html>

@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "The Hunt Engine",
+  "version": "1.0.0",
+  "description": "Unified cryptic-hunt / OSINT sidebar: live HTML comments & Base64, hidden-layer reveal, redirect chains, and a cipher clipboard.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "hunt-engine@osint.local",
+      "strict_min_version": "121.0"
+    }
+  },
+  "icons": {
+    "16": "icons/icon.svg",
+    "32": "icons/icon.svg",
+    "48": "icons/icon.svg",
+    "96": "icons/icon.svg"
+  },
+  "action": {
+    "default_title": "The Hunt Engine",
+    "default_icon": "icons/icon.svg"
+  },
+  "sidebar_action": {
+    "default_title": "The Hunt Engine",
+    "default_panel": "sidebar.html",
+    "default_icon": "icons/icon.svg",
+    "open_at_install": true
+  },
+  "background": {
+    "scripts": ["zip-archive.js", "background.js"],
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "permissions": [
+    "tabs",
+    "storage",
+    "webNavigation",
+    "webRequest",
+    "menus",
+    "activeTab",
+    "clipboardWrite",
+    "downloads"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://127.0.0.1:8745/*",
+    "http://localhost:8745/*"
+  ]
+}

@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Hunt Engine</title>
+    <link rel="stylesheet" href="sidebar.css" />
+  </head>
+  <body>
+    <header class="mast">
+      <div class="mast-row">
+        <div class="mast-mark" aria-hidden="true">
+          <img class="mast-icon" src="icons/icon.svg" alt="" width="22" height="22" />
+        </div>
+        <div class="mast-copy">
+          <h1>The Hunt Engine</h1>
+          <p id="active-host" class="host" title="">no active tab</p>
+        </div>
+      </div>
+      <button id="btn-reveal" class="reveal-btn" type="button" aria-pressed="false">
+        Reveal Hidden Layers
+      </button>
+
+      <div class="chrome-bar" role="group" aria-label="Hunt base">
+        <button
+          id="btn-pin-hunt"
+          class="chrome-pin"
+          type="button"
+          title="Pin active tab as hunt base (origin + path; same host accumulates)"
+          aria-pressed="false"
+        >
+          Pin
+        </button>
+        <span id="hunt-base-label" class="chrome-base" title="">No hunt base</span>
+        <label
+          class="chrome-ingest"
+          title="When a download completes, feed it into Archive / Image / Audio / Cipher and jump to that panel"
+        >
+          <input type="checkbox" id="auto-ingest-downloads" checked />
+          <span>Auto-ingest</span>
+        </label>
+      </div>
+      <p id="ingest-toast" class="ingest-toast" aria-live="polite" hidden></p>
+    </header>
+
+    <main class="stack" id="panel-stack">
+      <!-- Hunt -->
+      <details class="panel-group group-hunt" id="group-hunt" open data-group="group-hunt">
+        <summary>
+          <span class="drag-handle" title="Drag to reorder groups" aria-label="Drag to reorder groups" role="button">⋮⋮</span>
+          <span class="summary-label">Hunt</span>
+          <span class="group-badge" aria-hidden="true">1</span>
+        </summary>
+        <div class="group-body">
+          <details class="panel" id="panel-probe" open data-panel="panel-probe">
+            <summary>
+              <span class="summary-label">Backlink Identifier</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Paste a token or username. Priority hosts first (Pastebin, Bitly, Google Docs/Sheets, Pinterest pins). Hits need WhatsMyName-style exists signals — never bare HTTP 200. Auth walls / rate-limits show as blocked — check manually (still clickable). Soft misses land under Checked / filtered. Right-click selection → Probe as Backlink ID or Probe as Username."
+                aria-label="Help: Paste a token or username. Priority hosts first (Pastebin, Bitly, Google Docs/Sheets, Pinterest pins). Hits need WhatsMyName-style exists signals — never bare HTTP 200. Auth walls / rate-limits show as blocked — check manually (still clickable). Soft misses land under Checked / filtered. Right-click selection → Probe as Backlink ID or Probe as Username."
+              >
+                ?
+              </button>
+              <span class="badge" id="badge-probe">0</span>
+            </summary>
+            <div class="panel-body">
+              <div class="mode-row" role="group" aria-label="Search mode">
+                <button type="button" class="mode-btn is-active" data-mode="id" id="mode-id">
+                  ID / token
+                </button>
+                <button type="button" class="mode-btn" data-mode="username" id="mode-username">
+                  Username
+                </button>
+              </div>
+
+              <div class="probe-row">
+                <label class="sr-only" for="probe-input">Probe token</label>
+                <input
+                  id="probe-input"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="jGJuVGiK or 690519146701783042"
+                  autocomplete="off"
+                />
+                <button id="btn-probe" class="probe-btn" type="button">Search</button>
+                <button
+                  id="btn-clear-hunt"
+                  class="ghost-btn probe-clear"
+                  type="button"
+                  title="Clear all hunt base origins and path variants"
+                >
+                  Clear
+                </button>
+              </div>
+
+              <p id="probe-status" class="probe-status"></p>
+              <div class="probe-actions-row" id="probe-actions" hidden>
+                <button type="button" class="ghost-btn" id="btn-open-blocked">
+                  Open all blocked
+                </button>
+              </div>
+              <div id="probe-hits" class="probe-table"></div>
+              <details class="probe-filtered" id="probe-filtered" hidden>
+                <summary>
+                  <span>Checked / filtered</span>
+                  <span class="count" id="count-filtered">0</span>
+                </summary>
+                <div id="probe-filtered-body" class="probe-table probe-filtered-table"></div>
+              </details>
+
+              <section class="group">
+                <h2>Candidates on page <span class="count" id="count-candidates">0</span></h2>
+                <ul id="list-candidates" class="asset-list"></ul>
+              </section>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <!-- Page -->
+      <details class="panel-group group-page" id="group-page" open data-group="group-page">
+        <summary>
+          <span class="drag-handle" title="Drag to reorder groups" aria-label="Drag to reorder groups" role="button">⋮⋮</span>
+          <span class="summary-label">Page</span>
+          <span class="group-badge" aria-hidden="true">2</span>
+        </summary>
+        <div class="group-body">
+          <details class="panel" id="panel-assets" open data-panel="panel-assets">
+            <summary>
+              <span class="summary-label">Live Assets</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Auto-scans the active page (all frames) for links, comments, Base64, zero-width, flags, and meta. Response headers for the main document appear here when captured. Rescan after AJAX/SPA updates. Fetch robots.txt parses Allow/Disallow + Sitemap lines and lists up to 50 sitemap &lt;loc&gt; URLs. Rows hand off to Copy / Cipher / Probe / Notes / DNS."
+                aria-label="Help: Auto-scans the page for hunt-relevant material. Rescan after DOM changes. Includes headers, robots.txt, and light sitemap discovery."
+              >
+                ?
+              </button>
+              <span class="badge" id="badge-assets">0</span>
+            </summary>
+            <div class="panel-body">
+              <div class="toolbar toolbar-wrap">
+                <button id="btn-rescan" class="ghost-btn" type="button">Rescan page</button>
+                <button
+                  id="btn-robots"
+                  class="ghost-btn"
+                  type="button"
+                  title="Fetch robots.txt for this tab (and hunt base origin); parse paths + Sitemap; try /sitemap.xml"
+                >
+                  Fetch robots.txt
+                </button>
+                <span id="scan-status" class="status-hint"></span>
+              </div>
+              <p id="robots-status" class="status-hint robots-status" hidden></p>
+
+              <section class="group">
+                <h2>Response headers <span class="count" id="count-headers">0</span></h2>
+                <ul id="list-headers" class="asset-list"></ul>
+              </section>
+
+              <section class="group" id="section-robots" hidden>
+                <h2>robots.txt paths <span class="count" id="count-robots">0</span></h2>
+                <ul id="list-robots" class="asset-list"></ul>
+              </section>
+
+              <section class="group" id="section-sitemap" hidden>
+                <h2>Sitemap <span class="count" id="count-sitemap">0</span></h2>
+                <ul id="list-sitemap" class="asset-list"></ul>
+              </section>
+
+              <section class="group">
+                <h2>Links on page <span class="count" id="count-backlinks">0</span></h2>
+                <ul id="list-backlinks" class="asset-list"></ul>
+              </section>
+
+              <section class="group">
+                <h2>Audio / video on page <span class="count" id="count-media">0</span></h2>
+                <ul id="list-media" class="asset-list"></ul>
+              </section>
+
+              <section class="group">
+                <h2>Previously hidden <span class="count" id="count-revealed">0</span></h2>
+                <ul id="list-revealed" class="asset-list"></ul>
+              </section>
+
+              <section class="group">
+                <h2>HTML comments <span class="count" id="count-comments">0</span></h2>
+                <ul id="list-comments" class="asset-list"></ul>
+              </section>
+
+              <section class="group">
+                <h2>Base64 <span class="count" id="count-base64">0</span></h2>
+                <ul id="list-base64" class="asset-list"></ul>
+              </section>
+
+              <section class="group">
+                <h2>Zero-width / invisible <span class="count" id="count-zw">0</span></h2>
+                <ul id="list-zw" class="asset-list"></ul>
+              </section>
+
+              <section class="group">
+                <h2>Flag-shaped strings <span class="count" id="count-flags">0</span></h2>
+                <ul id="list-flags" class="asset-list"></ul>
+              </section>
+
+              <section class="group">
+                <h2>Meta / canonical <span class="count" id="count-meta">0</span></h2>
+                <ul id="list-meta" class="asset-list"></ul>
+              </section>
+            </div>
+          </details>
+
+          <details class="panel" id="panel-redirects" data-panel="panel-redirects">
+            <summary>
+              <span class="summary-label">Redirect Log</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Chronological main-frame redirect chains (HTTP 3xx and client/meta hops), newest first. Useful after shortener / meta-refresh bounces."
+                aria-label="Help: Main-frame redirect chains, newest first. HTTP 3xx and client hops."
+              >
+                ?
+              </button>
+              <span class="badge" id="badge-redirects">0</span>
+            </summary>
+            <div class="panel-body">
+              <div id="list-redirects" class="redirect-log"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <!-- Media -->
+      <details class="panel-group group-media" id="group-media" data-group="group-media">
+        <summary>
+          <span class="drag-handle" title="Drag to reorder groups" aria-label="Drag to reorder groups" role="button">⋮⋮</span>
+          <span class="summary-label">Media</span>
+          <span class="group-badge" aria-hidden="true">3</span>
+        </summary>
+        <div class="group-body">
+          <details class="panel" id="panel-image" open data-panel="panel-image">
+            <summary>
+              <span class="summary-label">Image Asset</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Right-click an image → Send image URL to Hunt Engine, reverse search, Forensics+, StegStruck (local full scan), Hex / strings, Split, or Meta. Probe filename strips the path segment for a Backlink ID search."
+                aria-label="Help: Right-click an image to capture URL. Reverse search, Forensics+, StegStruck, Hex/strings/Split/Meta."
+              >
+                ?
+              </button>
+              <span class="badge" id="badge-image">0</span>
+            </summary>
+            <div class="panel-body">
+              <div id="image-empty" class="status-hint">No image captured yet.</div>
+              <div id="image-card" class="image-card" hidden>
+                <p id="image-url" class="image-url mono" title=""></p>
+                <div class="image-actions">
+                  <button type="button" class="ghost-btn" id="btn-image-open">Open</button>
+                  <button type="button" class="ghost-btn" id="btn-image-copy">Copy URL</button>
+                  <button type="button" class="ghost-btn" id="btn-image-lens">Lens</button>
+                  <button type="button" class="ghost-btn" id="btn-image-yandex">Yandex</button>
+                  <button type="button" class="ghost-btn" id="btn-image-tineye">TinEye</button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-image-forensics"
+                    title="Open Forensically, Jeffrey’s EXIF, and FotoForensics; copy image URL"
+                  >
+                    Forensics+
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-image-stegstruck"
+                    title="Upload this image to local StegStruck (python -m stegstruck serve on :8745) for full parallel stego scan"
+                  >
+                    StegStruck
+                  </button>
+                  <button type="button" class="ghost-btn" id="btn-image-probe">Probe filename</button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-image-hex"
+                    title="Fetch bytes → hex head/tail + printable strings + editable region (stego peek); also scans for concatenated files"
+                  >
+                    Hex / strings
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-image-split"
+                    title="Scan for glued / concatenated payloads (JPEG after EOI, PNG+ZIP, …) and download parts"
+                  >
+                    Split
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-image-meta"
+                    title="Fetch bytes → JPEG EXIF / PNG text chunks"
+                  >
+                    Meta
+                  </button>
+                </div>
+                <p id="image-forensics-status" class="status-hint image-forensics-status" aria-live="polite" hidden></p>
+                <div id="image-forensics-fallback" class="image-forensics-fallback" hidden>
+                  <button type="button" class="ghost-btn" id="btn-image-copy-fallback">
+                    Copy image URL
+                  </button>
+                </div>
+                <div id="image-meta-panel" class="image-hex-panel" hidden>
+                  <h3 class="hex-subhead">Image metadata</h3>
+                  <p id="image-meta-status" class="status-hint"></p>
+                  <ul id="image-meta-list" class="asset-list"></ul>
+                </div>
+                <div id="image-hex-panel" class="image-hex-panel" hidden>
+                  <p id="image-hex-meta" class="status-hint"></p>
+
+                  <div id="image-split-panel" class="image-split-panel" hidden>
+                    <h3 class="hex-subhead">Concatenated / split</h3>
+                    <p id="image-split-status" class="status-hint image-split-banner" aria-live="polite"></p>
+                    <div id="image-split-actions" class="image-actions hex-edit-actions"></div>
+                    <ul id="image-split-list" class="asset-list"></ul>
+                    <div id="image-split-preview-wrap" class="hex-preview-wrap split-preview-wrap" hidden>
+                      <h3 class="hex-subhead">Split preview</h3>
+                      <div id="image-split-previews" class="split-previews"></div>
+                    </div>
+                  </div>
+
+                  <h3 class="hex-subhead">Trailing / printable strings</h3>
+                  <ul id="image-hex-strings" class="asset-list"></ul>
+                  <h3 class="hex-subhead">Head (first 256 B)</h3>
+                  <pre id="image-hex-head" class="hex-dump mono"></pre>
+                  <h3 class="hex-subhead">Tail (last 256 B)</h3>
+                  <pre id="image-hex-tail" class="hex-dump mono"></pre>
+
+                  <div class="hex-edit-block">
+                    <h3 class="hex-subhead">
+                      Hex edit
+                      <span id="image-hex-edit-label" class="hex-edit-scope"></span>
+                    </h3>
+                    <p class="status-hint hex-crc-warn">
+                      PNG CRC / chunk integrity may break if you corrupt structure — download still allowed.
+                    </p>
+                    <label class="sr-only" for="image-hex-edit">Editable hex bytes</label>
+                    <textarea
+                      id="image-hex-edit"
+                      class="hex-edit mono"
+                      rows="8"
+                      spellcheck="false"
+                      autocomplete="off"
+                      placeholder="Hex bytes (spaces optional)…"
+                    ></textarea>
+                    <div class="image-actions hex-edit-actions">
+                      <button type="button" class="ghost-btn" id="btn-hex-apply" title="Re-fetch original, apply edited region, show preview">
+                        Apply / Patch
+                      </button>
+                      <button type="button" class="ghost-btn" id="btn-hex-reset">Reset</button>
+                      <button type="button" class="ghost-btn" id="btn-hex-download" hidden>
+                        Download patched
+                      </button>
+                    </div>
+                    <p id="image-hex-edit-status" class="status-hint" aria-live="polite"></p>
+                    <div id="image-hex-preview-wrap" class="hex-preview-wrap" hidden>
+                      <h3 class="hex-subhead">Patched preview</h3>
+                      <img id="image-hex-preview" class="hex-preview-img" alt="Patched image preview" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <details class="panel" id="panel-audio" open data-panel="panel-audio">
+            <summary>
+              <span class="summary-label">Audio Asset</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Right-click audio/video or an audio link → Send audio URL to Hunt Engine. Strings + MP3 ID3 (title/artist/comment) peek; Morse-like text gets a one-click Cipher decode. Drop a local file to play it in-panel and analyze. Deep tools open Audacity spectrogram wiki, online spectrum, dCode Morse, and SSTV in background tabs (upload there manually)."
+                aria-label="Help: Capture audio URLs from the page or downloads. Preview playback, strings, ID3 tags, Morse decode, and external spectrogram/Morse/SSTV tools."
+              >
+                ?
+              </button>
+              <span class="badge" id="badge-audio">0</span>
+            </summary>
+            <div class="panel-body">
+              <div
+                id="audio-drop"
+                class="archive-drop audio-drop"
+                tabindex="0"
+                role="button"
+                aria-label="Analyze audio — drop a file or click to choose"
+              >
+                <span class="archive-drop-label">Analyze audio file</span>
+                <span class="archive-drop-hint">Drop MP3 / WAV / OGG / M4A / FLAC here, or click to choose</span>
+                <input
+                  id="audio-file"
+                  class="archive-file-input"
+                  type="file"
+                  accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac,.webm"
+                />
+              </div>
+              <div id="audio-empty" class="status-hint">No audio captured yet.</div>
+              <div id="audio-card" class="image-card" hidden>
+                <p id="audio-url" class="image-url mono" title=""></p>
+                <audio id="audio-preview" class="audio-preview" controls hidden preload="metadata"></audio>
+                <div class="image-actions">
+                  <button type="button" class="ghost-btn" id="btn-audio-open">Open</button>
+                  <button type="button" class="ghost-btn" id="btn-audio-copy">Copy URL</button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-audio-analyze"
+                    title="Fetch bytes → printable strings + MP3 ID3 tags"
+                  >
+                    Strings / ID3
+                  </button>
+                  <button type="button" class="ghost-btn" id="btn-audio-probe">Probe filename</button>
+                </div>
+                <div class="image-actions audio-deep-row" role="group" aria-label="External audio tools">
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-audio-audacity"
+                    title="Audacity wiki — spectrogram view"
+                  >
+                    Spectrogram wiki
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-audio-spectrum"
+                    title="Online spectrum analyzer"
+                  >
+                    Spectrum
+                  </button>
+                  <button type="button" class="ghost-btn" id="btn-audio-morse" title="dCode Morse decoder">
+                    dCode Morse
+                  </button>
+                  <button type="button" class="ghost-btn" id="btn-audio-sstv" title="Online SSTV decoder">
+                    SSTV
+                  </button>
+                </div>
+                <p class="status-hint">Deep tools open in background tabs — upload the audio there manually.</p>
+                <p id="audio-status" class="status-hint" aria-live="polite"></p>
+                <div id="audio-analyze-panel" class="image-hex-panel" hidden>
+                  <h3 class="hex-subhead">ID3 / metadata</h3>
+                  <p id="audio-id3-status" class="status-hint"></p>
+                  <ul id="audio-id3-list" class="asset-list"></ul>
+                  <h3 class="hex-subhead">Printable strings</h3>
+                  <ul id="audio-strings" class="asset-list"></ul>
+                  <div id="audio-morse-panel" class="audio-morse-panel" hidden>
+                    <h3 class="hex-subhead">Morse decode</h3>
+                    <ul id="audio-morse-list" class="asset-list"></ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <details class="panel" id="panel-archive" open data-panel="panel-archive">
+            <summary>
+              <span class="summary-label">Last download / Archive</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Auto-ingest (top chrome, default ON): completed downloads jump here or to Image / Cipher. ZIP / JAR / APK are re-fetched (≤ ~16 MB) for EOCD comment + encryption. Hex-looking comments often are the password — use Cipher. If the URL is blob:/expired, drop the file here. RAR / 7z comments are not parsed yet."
+                aria-label="Help: Auto-ingest feeds ZIP downloads into this panel for comment and encryption. Drop a file to analyze manually. Hex comments often decode to the password via Cipher."
+              >
+                ?
+              </button>
+              <span class="badge" id="badge-archive">0</span>
+            </summary>
+            <div class="panel-body">
+              <div
+                id="archive-drop"
+                class="archive-drop"
+                tabindex="0"
+                role="button"
+                aria-label="Analyze archive — drop a ZIP file or click to choose"
+              >
+                <span class="archive-drop-label">Analyze archive</span>
+                <span class="archive-drop-hint">Drop ZIP / JAR / APK here, or click to choose</span>
+                <input
+                  id="archive-file"
+                  class="archive-file-input"
+                  type="file"
+                  accept=".zip,.jar,.apk,.war,.ear,.rar,.7z,application/zip,application/java-archive"
+                />
+              </div>
+              <p id="archive-status" class="status-hint" aria-live="polite"></p>
+              <div id="archive-empty" class="status-hint">No archive inspected yet.</div>
+              <div id="archive-card" class="archive-card" hidden>
+                <p id="archive-filename" class="archive-filename mono" title=""></p>
+                <dl class="archive-meta">
+                  <div>
+                    <dt>Encrypted</dt>
+                    <dd id="archive-encrypted">—</dd>
+                  </div>
+                  <div>
+                    <dt>Comment</dt>
+                    <dd id="archive-comment" class="mono">—</dd>
+                  </div>
+                </dl>
+                <div id="archive-hex-hint" class="archive-hex-hint" hidden>
+                  <span class="archive-hex-chip">Hex →</span>
+                  <span id="archive-hex-decoded" class="mono"></span>
+                </div>
+                <div class="image-actions archive-actions">
+                  <button type="button" class="ghost-btn" id="btn-archive-copy" title="Copy archive comment">
+                    Copy comment
+                  </button>
+                  <button type="button" class="ghost-btn" id="btn-archive-cipher" title="Send comment to Cipher Clipboard">
+                    Cipher
+                  </button>
+                  <button type="button" class="ghost-btn" id="btn-archive-notes" title="Append comment to Notes">
+                    Notes
+                  </button>
+                  <button type="button" class="ghost-btn" id="btn-archive-probe" title="Probe comment as Backlink ID">
+                    Probe
+                  </button>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <!-- Decode -->
+      <details class="panel-group group-decode" id="group-decode" data-group="group-decode">
+        <summary>
+          <span class="drag-handle" title="Drag to reorder groups" aria-label="Drag to reorder groups" role="button">⋮⋮</span>
+          <span class="summary-label">Decode</span>
+          <span class="group-badge" aria-hidden="true">4</span>
+        </summary>
+        <div class="group-body">
+          <details class="panel" id="panel-cipher" open data-panel="panel-cipher">
+            <summary>
+              <span class="summary-label">Cipher Clipboard</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Paste, select encoded text on the page (auto-decode), or right-click Send to Hunt Engine. Local-only decoders: Base64, Hex, Octal, Decimal, Binary, Binary→Morse (0=· 1=−), Ternary/Base-3, ROT13/47, URL, Reverse, Atbash, Morse, A1Z26, Bacon, Phone keypad (T9), Caesar crib, and manual ROT-N (letters N mod 26 + ASCII printable). Optional key (session only) unlocks Vigenère decrypt and repeating-key XOR. Guesser chips suggest likely encodings — click to jump to a card. Invalid cards are expected for mismatched formats. Toggle Auto-decode selection to disable page-selection sends."
+                aria-label="Help: Local cipher decode. ROT-N and optional key for Vigenère/XOR. Select encoded text to auto-fill."
+              >
+                ?
+              </button>
+            </summary>
+            <div class="panel-body">
+              <label class="sr-only" for="cipher-input">Cipher input</label>
+              <textarea
+                id="cipher-input"
+                rows="3"
+                spellcheck="false"
+                placeholder="Paste or select encoded text on the page…"
+              ></textarea>
+              <div class="cipher-rot-row" aria-label="Manual ROT-N and key">
+                <span class="cipher-rot-label">ROT-N</span>
+                <input
+                  type="range"
+                  id="cipher-rot-slider"
+                  class="cipher-rot-slider"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="13"
+                  aria-label="ROT-N slider"
+                />
+                <input
+                  type="number"
+                  id="cipher-rot-n"
+                  class="cipher-rot-n"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="13"
+                  inputmode="numeric"
+                  title="Shift N (0–100). Letters use N mod 26; a second card rotates printable ASCII by full N."
+                />
+                <label class="sr-only" for="cipher-key">Key</label>
+                <input
+                  type="password"
+                  id="cipher-key"
+                  class="cipher-key"
+                  spellcheck="false"
+                  autocomplete="off"
+                  placeholder="key"
+                  title="Session-only key for Vigenère decrypt and repeating-key XOR (not saved)."
+                />
+              </div>
+              <label class="cipher-auto-opt" title="When on, selecting Base64/hex/Morse/etc. on the page fills this clipboard (heuristic; skips normal prose).">
+                <input type="checkbox" id="cipher-auto-decode" checked />
+                <span>Auto-decode selection</span>
+              </label>
+              <div id="cipher-guesses" class="cipher-guesses" hidden></div>
+              <div id="cipher-cards" class="cipher-grid"></div>
+            </div>
+          </details>
+
+          <details class="panel" id="panel-notes" data-panel="panel-notes">
+            <summary>
+              <span class="summary-label">Notes</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Persistent notepad for clues. Analyze extracts capitals, first/last letters, acrostics, spaced numbers (for decimal ASCII hunts), digits, and parentheses letters from the selection (or full note). Format tools and Send to Cipher / Probe use selection when present."
+                aria-label="Help: Persistent notes. Analyze extracts hidden messages from selection or full note."
+              >
+                ?
+              </button>
+            </summary>
+            <div class="panel-body">
+              <label class="sr-only" for="notes-input">Hunt notes</label>
+              <textarea
+                id="notes-input"
+                rows="8"
+                spellcheck="false"
+                placeholder="Paste clues, tokens, URLs…"
+              ></textarea>
+              <div class="notes-toolbar" role="toolbar" aria-label="Notes actions">
+                <button type="button" class="ghost-btn" id="btn-notes-analyze" title="Extract hidden messages">
+                  Analyze
+                </button>
+                <button type="button" class="ghost-btn" id="btn-notes-count" title="Count chars, words, lines">
+                  Count
+                </button>
+              </div>
+              <div class="notes-send-row">
+                <button type="button" class="ghost-btn" id="btn-notes-to-cipher">
+                  Send to Cipher Clipboard
+                </button>
+                <button type="button" class="ghost-btn" id="btn-notes-to-probe">
+                  Probe as Backlink ID
+                </button>
+              </div>
+              <details class="notes-format">
+                <summary>Format</summary>
+                <div class="notes-toolbar notes-format-toolbar" role="toolbar" aria-label="Text format">
+                  <button type="button" class="ghost-btn notes-xform" data-notes-xform="upper" title="UPPERCASE">
+                    ABC
+                  </button>
+                  <button type="button" class="ghost-btn notes-xform" data-notes-xform="lower" title="lowercase">
+                    abc
+                  </button>
+                  <button type="button" class="ghost-btn notes-xform" data-notes-xform="title" title="Title Case">
+                    Title
+                  </button>
+                  <button type="button" class="ghost-btn notes-xform" data-notes-xform="trim" title="Trim">
+                    Trim
+                  </button>
+                  <button type="button" class="ghost-btn notes-xform" data-notes-xform="collapse" title="Collapse whitespace">
+                    Collapse
+                  </button>
+                  <button type="button" class="ghost-btn notes-xform" data-notes-xform="reverse" title="Reverse">
+                    Reverse
+                  </button>
+                  <button type="button" class="ghost-btn notes-xform" data-notes-xform="nospace" title="Remove spaces">
+                    No spaces
+                  </button>
+                </div>
+              </details>
+              <p id="notes-status" class="notes-status status-hint" aria-live="polite"></p>
+              <div id="notes-results" class="notes-results" hidden></div>
+            </div>
+          </details>
+
+          <details class="panel" id="panel-geohash" data-panel="panel-geohash">
+            <summary>
+              <span class="summary-label">Geohash / Coords</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Paste a geohash or lat, lon. Resolves locally (no map API key) → OpenStreetMap / Google Maps plus Copy / Cipher / Notes. Right-click selection → Resolve geohash / coords in Hunt Engine."
+                aria-label="Help: Paste a geohash or lat, lon. Resolves locally → map links. Right-click selection → Resolve geohash / coords."
+              >
+                ?
+              </button>
+            </summary>
+            <div class="panel-body">
+              <div class="probe-row">
+                <label class="sr-only" for="geohash-input">Geohash or coordinates</label>
+                <input
+                  id="geohash-input"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="gcf23vys4qp or 54.65, -8.11"
+                  autocomplete="off"
+                />
+                <button id="btn-geohash" class="probe-btn" type="button">Resolve</button>
+              </div>
+              <p id="geohash-status" class="status-hint" aria-live="polite"></p>
+              <div id="geohash-results" class="geohash-results"></div>
+            </div>
+          </details>
+
+          <details class="panel" id="panel-dns" data-panel="panel-dns">
+            <summary>
+              <span class="summary-label">DNS Inspector</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Lookup DNS via DoH (Cloudflare). TXT listed first — common cryptic hop. Right-click a domain → DNS lookup in Hunt Engine. Each record can hand off to Cipher / Probe / Notes."
+                aria-label="Help: Lookup DNS via DoH (Cloudflare). TXT first — common cryptic hop. Right-click a domain → DNS lookup in Hunt Engine."
+              >
+                ?
+              </button>
+              <span class="badge" id="badge-dns">0</span>
+            </summary>
+            <div class="panel-body">
+              <div class="probe-row">
+                <label class="sr-only" for="dns-input">Domain</label>
+                <input
+                  id="dns-input"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="example.com"
+                  autocomplete="off"
+                />
+                <button id="btn-dns" class="probe-btn" type="button">Lookup</button>
+              </div>
+              <p id="dns-status" class="status-hint" aria-live="polite"></p>
+              <div id="dns-results" class="dns-results"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+    </main>
+
+    <script src="zip-archive.js"></script>
+    <script src="sidebar.js"></script>
+  </body>
+</html>

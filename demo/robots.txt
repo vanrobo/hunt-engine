@@ -1,0 +1,10 @@
+# Neon Rook demo — for Hunt Engine Fetch robots.txt practice
+User-agent: *
+Allow: /practice/
+Allow: /practice/signal.html
+Disallow: /raw/
+Disallow: /p/
+Disallow: /paste/
+Disallow: /a/
+Disallow: /file/
+Sitemap: http://127.0.0.1:8765/sitemap.xml

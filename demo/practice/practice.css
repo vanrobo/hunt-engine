@@ -1,0 +1,28 @@
+.practice .hero h1 {
+  letter-spacing: -0.03em;
+}
+
+.practice .play-steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+}
+
+.practice .play-steps li {
+  margin-bottom: 6px;
+}
+
+.practice .mark {
+  margin: 12px 0 0;
+}
+
+.practice .mark img {
+  display: block;
+  background: #111;
+  border: 1px solid var(--line);
+}
+
+.practice .mark figcaption {
+  margin-top: 8px;
+  font-size: 13px;
+}

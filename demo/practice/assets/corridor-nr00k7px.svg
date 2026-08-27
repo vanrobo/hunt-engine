@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="Neon Rook corridor mark">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d3b2e"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="240" fill="url(#g)"/>
+  <rect x="28" y="28" width="184" height="184" fill="none" stroke="#3dffa8" stroke-width="2" opacity="0.85"/>
+  <path d="M120 52 L168 168 H72 Z" fill="none" stroke="#3dffa8" stroke-width="3"/>
+  <circle cx="120" cy="128" r="10" fill="#3dffa8"/>
+  <text x="120" y="210" text-anchor="middle" fill="#8a9a92" font-family="Consolas, monospace" font-size="11">NEON ROOK</text>
+</svg>
