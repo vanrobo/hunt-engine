@@ -32,12 +32,29 @@
           Pin
         </button>
         <span id="hunt-base-label" class="chrome-base" title="">No hunt base</span>
+        <button
+          id="btn-unpin-hunt"
+          class="chrome-unpin"
+          type="button"
+          hidden
+          title="Clear pinned hunt base"
+          aria-label="Clear pinned hunt base"
+        >
+          ×
+        </button>
         <label
           class="chrome-ingest"
           title="When a download completes, feed it into Archive / Image / Audio / Cipher and jump to that panel"
         >
           <input type="checkbox" id="auto-ingest-downloads" checked />
           <span>Auto-ingest</span>
+        </label>
+        <label
+          class="chrome-ingest"
+          title="Highlight a word — Hunt Engine probes only your pinned hunt base (/{token}, /p/{token}, …). Not the site you are reading. Toast + notification on a hit."
+        >
+          <input type="checkbox" id="auto-probe-hunt" checked />
+          <span>Auto-probe hunt</span>
         </label>
       </div>
       <p id="ingest-toast" class="ingest-toast" aria-live="polite" hidden></p>
@@ -86,10 +103,10 @@
                 />
                 <button id="btn-probe" class="probe-btn" type="button">Search</button>
                 <button
-                  id="btn-clear-hunt"
+                  id="btn-clear-probe"
                   class="ghost-btn probe-clear"
                   type="button"
-                  title="Clear all hunt base origins and path variants"
+                  title="Stop search and clear results"
                 >
                   Clear
                 </button>
@@ -114,6 +131,66 @@
                 <h2>Candidates on page <span class="count" id="count-candidates">0</span></h2>
                 <ul id="list-candidates" class="asset-list"></ul>
               </section>
+            </div>
+          </details>
+
+          <details class="panel" id="panel-id-router" data-panel="panel-id-router">
+            <summary>
+              <span class="summary-label">ID Router</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Paste any suspicious string — snowflake, YouTube ID, Pastebin slug, geohash, ISBN, UUID, etc. Shows canonical URLs + Probe as backlink. Pattern-based only; no hunt-specific IDs."
+                aria-label="Help: Pattern-based ID router for common platform tokens."
+              >
+                ?
+              </button>
+            </summary>
+            <div class="panel-body">
+              <div class="probe-row">
+                <label class="sr-only" for="id-router-input">Token or string</label>
+                <input
+                  id="id-router-input"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="dQw4w9WgXcQ or 9780143127741"
+                  autocomplete="off"
+                />
+                <button id="btn-id-router" class="probe-btn" type="button">Identify</button>
+              </div>
+              <p id="id-router-status" class="status-hint" aria-live="polite"></p>
+              <div id="id-router-results" class="id-router-results"></div>
+            </div>
+          </details>
+
+          <details class="panel" id="panel-paste" data-panel="panel-paste">
+            <summary>
+              <span class="summary-label">Paste / dead-drop</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Paste a paste host URL or bare ID. Fetches raw body (256 KB cap), warns on password pages, extracts #tags for Cipher / Notes / probe."
+                aria-label="Help: Unified paste viewer for Pastebin, rentry, ControlC, etc."
+              >
+                ?
+              </button>
+            </summary>
+            <div class="panel-body">
+              <div class="probe-row">
+                <label class="sr-only" for="paste-input">Paste URL or ID</label>
+                <input
+                  id="paste-input"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="pastebin.com/abc123 or rentry.co/slug"
+                  autocomplete="off"
+                />
+                <button id="btn-paste-fetch" class="probe-btn" type="button">Fetch</button>
+              </div>
+              <p id="paste-status" class="status-hint" aria-live="polite"></p>
+              <p id="paste-warning" class="status-hint paste-warning" hidden></p>
+              <div id="paste-tags" class="artifact-chip-row" hidden></div>
+              <pre id="paste-body" class="paste-body mono" hidden></pre>
             </div>
           </details>
         </div>
@@ -144,6 +221,14 @@
               <div class="toolbar toolbar-wrap">
                 <button id="btn-rescan" class="ghost-btn" type="button">Rescan page</button>
                 <button
+                  id="btn-scan-source"
+                  class="ghost-btn"
+                  type="button"
+                  title="Re-fetch page HTML and list comments, CSS-hidden text, and odd meta (256 KB cap). Complements DOM scan + Reveal Hidden Layers."
+                >
+                  Scan source
+                </button>
+                <button
                   id="btn-robots"
                   class="ghost-btn"
                   type="button"
@@ -153,6 +238,9 @@
                 </button>
                 <span id="scan-status" class="status-hint"></span>
               </div>
+              <p class="status-hint book-tip">
+                Book hops: chapter title + page number — search inside archive preview.
+              </p>
               <p id="robots-status" class="status-hint robots-status" hidden></p>
 
               <section class="group">
@@ -180,14 +268,23 @@
                 <ul id="list-media" class="asset-list"></ul>
               </section>
 
-              <section class="group">
-                <h2>Previously hidden <span class="count" id="count-revealed">0</span></h2>
+              <section class="group hidden-content-group">
+                <h2>Hidden content</h2>
+                <h3 class="subhead">DOM scan — previously hidden <span class="count" id="count-revealed">0</span></h3>
                 <ul id="list-revealed" class="asset-list"></ul>
+                <h3 class="subhead">DOM scan — HTML comments <span class="count" id="count-comments">0</span></h3>
+                <ul id="list-comments" class="asset-list"></ul>
+                <h3 class="subhead">Source scan — comments <span class="count" id="count-source-comments">0</span></h3>
+                <ul id="list-source-comments" class="asset-list"></ul>
+                <h3 class="subhead">Source scan — CSS hidden <span class="count" id="count-source-hidden">0</span></h3>
+                <ul id="list-source-hidden" class="asset-list"></ul>
+                <h3 class="subhead">Source scan — odd meta <span class="count" id="count-source-meta">0</span></h3>
+                <ul id="list-source-meta" class="asset-list"></ul>
               </section>
 
               <section class="group">
-                <h2>HTML comments <span class="count" id="count-comments">0</span></h2>
-                <ul id="list-comments" class="asset-list"></ul>
+                <h2>Media filenames &amp; alt <span class="count" id="count-media-alt">0</span></h2>
+                <ul id="list-media-alt" class="asset-list"></ul>
               </section>
 
               <section class="group">
@@ -246,17 +343,34 @@
               <button
                 type="button"
                 class="help-tip"
-                title="Right-click an image → Send image URL to Hunt Engine, reverse search, Forensics+, StegStruck (local full scan), Hex / strings, Split, or Meta. Probe filename strips the path segment for a Backlink ID search."
-                aria-label="Help: Right-click an image to capture URL. Reverse search, Forensics+, StegStruck, Hex/strings/Split/Meta."
+                title="Right-click an image → Send image URL to Hunt Engine, or drop/choose a local file below. Reverse search, Forensics+, StegStruck, local ELA/LSB, Hex / strings, Split, Meta."
+                aria-label="Help: Capture image URL from the page or drop a local file. Reverse search, forensics, ELA/LSB, Hex/strings/Split/Meta."
               >
                 ?
               </button>
               <span class="badge" id="badge-image">0</span>
             </summary>
             <div class="panel-body">
-              <div id="image-empty" class="status-hint">No image captured yet.</div>
+              <div
+                id="image-drop"
+                class="archive-drop image-drop"
+                tabindex="0"
+                role="button"
+                aria-label="Analyze image — drop a file or click to choose"
+              >
+                <span class="archive-drop-label">Analyze image file</span>
+                <span class="archive-drop-hint">Drop PNG / JPG / GIF / WEBP here, or click to choose</span>
+                <input
+                  id="image-file"
+                  class="archive-file-input"
+                  type="file"
+                  accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.avif,.ico"
+                />
+              </div>
+              <div id="image-empty" class="status-hint">No image captured yet — right-click a page image or drop a file above.</div>
               <div id="image-card" class="image-card" hidden>
                 <p id="image-url" class="image-url mono" title=""></p>
+                <img id="image-preview" class="image-preview" alt="Image preview" hidden />
                 <div class="image-actions">
                   <button type="button" class="ghost-btn" id="btn-image-open">Open</button>
                   <button type="button" class="ghost-btn" id="btn-image-copy">Copy URL</button>
@@ -266,10 +380,42 @@
                   <button
                     type="button"
                     class="ghost-btn"
-                    id="btn-image-forensics"
-                    title="Open Forensically, Jeffrey’s EXIF, and FotoForensics; copy image URL"
+                    id="btn-image-ela"
+                    title="Local Error Level Analysis (JPEG best)"
                   >
-                    Forensics+
+                    ELA
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-image-lsb"
+                    title="Local LSB bit planes (R/G/B bits 0–1)"
+                  >
+                    LSB
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-image-channels"
+                    title="RGB channel split"
+                  >
+                    Channels
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-image-forensics"
+                    title="Local ELA analysis in-panel (image auto-loaded)"
+                  >
+                    Forensics
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-image-forensics-external"
+                    title="Open Forensically (with image), Jeffrey's EXIF, FotoForensics"
+                  >
+                    External sites
                   </button>
                   <button
                     type="button"
@@ -315,6 +461,55 @@
                   <h3 class="hex-subhead">Image metadata</h3>
                   <p id="image-meta-status" class="status-hint"></p>
                   <ul id="image-meta-list" class="asset-list"></ul>
+                </div>
+                <div id="image-local-panel" class="image-hex-panel" hidden>
+                  <h3 class="hex-subhead">Local forensics</h3>
+                  <p id="image-local-status" class="status-hint" aria-live="polite"></p>
+                  <div id="image-local-ela-wrap" class="local-tool-wrap" hidden>
+                    <p class="status-hint">
+                      ELA works best on JPEG; PNG edits may show uniformly.
+                    </p>
+                    <p class="status-hint">
+                      Error Level Analysis (amplified difference vs recompressed JPEG)
+                    </p>
+                    <div id="image-ela-controls" class="ela-controls" hidden>
+                      <label class="ela-slider-row">
+                        <span>JPEG quality</span>
+                        <input
+                          type="range"
+                          id="image-ela-quality"
+                          min="50"
+                          max="99"
+                          value="90"
+                          step="1"
+                        />
+                        <span id="image-ela-quality-val" class="ela-slider-val">90</span>
+                      </label>
+                      <label class="ela-slider-row">
+                        <span>Error scale</span>
+                        <input
+                          type="range"
+                          id="image-ela-scale"
+                          min="1"
+                          max="50"
+                          value="20"
+                          step="1"
+                        />
+                        <span id="image-ela-scale-val" class="ela-slider-val">20</span>
+                      </label>
+                      <button
+                        type="button"
+                        class="ghost-btn"
+                        id="btn-image-forensically"
+                        title="Open Forensically (29a.ch) with this image loaded"
+                      >
+                        Open in Forensically
+                      </button>
+                    </div>
+                    <canvas id="image-ela-canvas" class="local-tool-canvas wide"></canvas>
+                  </div>
+                  <div id="image-local-lsb-wrap" class="local-tool-grid" hidden></div>
+                  <div id="image-local-channels-wrap" class="local-tool-grid" hidden></div>
                 </div>
                 <div id="image-hex-panel" class="image-hex-panel" hidden>
                   <p id="image-hex-meta" class="status-hint"></p>
@@ -380,7 +575,7 @@
               <button
                 type="button"
                 class="help-tip"
-                title="Right-click audio/video or an audio link → Send audio URL to Hunt Engine. Strings + MP3 ID3 (title/artist/comment) peek; Morse-like text gets a one-click Cipher decode. Drop a local file to play it in-panel and analyze. Deep tools open Audacity spectrogram wiki, online spectrum, dCode Morse, and SSTV in background tabs (upload there manually)."
+                title="Right-click audio/video or an audio link → Send audio URL to Hunt Engine. Strings + MP3 ID3 peek; local spectrogram/Morse/SSTV in-panel. External row: Audacity wiki, spectrum, dCode Morse (auto-fill)."
                 aria-label="Help: Capture audio URLs from the page or downloads. Preview playback, strings, ID3 tags, Morse decode, and external spectrogram/Morse/SSTV tools."
               >
                 ?
@@ -421,6 +616,24 @@
                   </button>
                   <button type="button" class="ghost-btn" id="btn-audio-probe">Probe filename</button>
                 </div>
+                <div class="image-actions audio-deep-row" role="group" aria-label="Local audio tools">
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-audio-spectrogram"
+                    title="Local spectrogram (Web Audio FFT)"
+                  >
+                    Spectrogram
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    id="btn-audio-morse-local"
+                    title="Decode Morse from audio tone bursts (experimental)"
+                  >
+                    Morse decode
+                  </button>
+                </div>
                 <div class="image-actions audio-deep-row" role="group" aria-label="External audio tools">
                   <button
                     type="button"
@@ -428,7 +641,7 @@
                     id="btn-audio-audacity"
                     title="Audacity wiki — spectrogram view"
                   >
-                    Spectrogram wiki
+                    Audacity wiki
                   </button>
                   <button
                     type="button"
@@ -436,17 +649,34 @@
                     id="btn-audio-spectrum"
                     title="Online spectrum analyzer"
                   >
-                    Spectrum
+                    Spectrum (web)
                   </button>
-                  <button type="button" class="ghost-btn" id="btn-audio-morse" title="dCode Morse decoder">
+                  <button type="button" class="ghost-btn" id="btn-audio-morse" title="Open dCode Morse decoder (auto-fills if Morse was decoded in-panel)">
                     dCode Morse
                   </button>
-                  <button type="button" class="ghost-btn" id="btn-audio-sstv" title="Online SSTV decoder">
-                    SSTV
+                  <button type="button" class="ghost-btn" id="btn-audio-sstv" title="Experimental local SSTV decode (Scottie S1). For full decode use hunt-cli: python -m hunt_cli sstv file.wav">
+                    SSTV (local)
                   </button>
                 </div>
-                <p class="status-hint">Deep tools open in background tabs — upload the audio there manually.</p>
+                <p class="status-hint">Spectrogram, Morse, and SSTV run in-panel. dCode Morse opens with dots/dashes filled when Morse decode ran first.</p>
                 <p id="audio-status" class="status-hint" aria-live="polite"></p>
+                <div id="audio-local-panel" class="image-hex-panel" hidden>
+                  <p id="audio-local-status" class="status-hint" aria-live="polite"></p>
+                  <div id="audio-spectrogram-wrap" class="local-tool-wrap" hidden>
+                    <h3 class="hex-subhead">Spectrogram</h3>
+                    <canvas id="audio-spectrogram-canvas" class="local-tool-canvas wide"></canvas>
+                  </div>
+                  <div id="audio-morse-local-wrap" class="local-tool-wrap" hidden>
+                    <h3 class="hex-subhead">Morse from audio</h3>
+                    <pre id="audio-morse-local-text" class="mono local-morse-out"></pre>
+                    <p id="audio-morse-local-raw" class="status-hint mono"></p>
+                  </div>
+                  <div id="audio-sstv-wrap" class="local-tool-wrap" hidden>
+                    <h3 class="hex-subhead">SSTV (experimental)</h3>
+                    <canvas id="audio-sstv-canvas" class="local-tool-canvas wide"></canvas>
+                    <p class="status-hint">Scottie S1 only — for Robot 36 / VIS use hunt-cli: <code>python -m hunt_cli sstv file.wav</code></p>
+                  </div>
+                </div>
                 <div id="audio-analyze-panel" class="image-hex-panel" hidden>
                   <h3 class="hex-subhead">ID3 / metadata</h3>
                   <p id="audio-id3-status" class="status-hint"></p>
@@ -459,6 +689,45 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </details>
+
+          <details class="panel" id="panel-video" data-panel="panel-video">
+            <summary>
+              <span class="summary-label">Video / comments</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Video URLs from Live Assets: title via noembed, open comments, copy ID for probe. Comment workspace: paste comment text when the platform hides it (login/spam) — not scraped."
+                aria-label="Help: Video metadata lane and manual comment workspace."
+              >
+                ?
+              </button>
+            </summary>
+            <div class="panel-body">
+              <div class="probe-row">
+                <label class="sr-only" for="video-input">Video URL</label>
+                <input
+                  id="video-input"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="https://youtube.com/watch?v=…"
+                  autocomplete="off"
+                />
+                <button id="btn-video-meta" class="probe-btn" type="button">Load</button>
+              </div>
+              <p id="video-status" class="status-hint" aria-live="polite"></p>
+              <div id="video-meta-card" class="geohash-card" hidden></div>
+              <h3 class="subhead">Comment workspace</h3>
+              <p class="status-hint">Paste comment text here when YouTube/Reddit blocks or hides it.</p>
+              <label class="sr-only" for="comment-workspace">Comment workspace</label>
+              <textarea
+                id="comment-workspace"
+                rows="4"
+                spellcheck="false"
+                placeholder="Paste comment thread text…"
+              ></textarea>
+              <div id="comment-workspace-chips" class="artifact-chip-row"></div>
             </div>
           </details>
 
@@ -596,6 +865,26 @@
                 <input type="checkbox" id="cipher-auto-decode" checked />
                 <span>Auto-decode selection</span>
               </label>
+              <div class="cipher-deeplinks image-actions" aria-label="External cipher tools">
+                <button type="button" class="ghost-btn" id="btn-cipher-quipqiup" title="Open quipqiup with clipboard text">
+                  quipqiup
+                </button>
+                <button type="button" class="ghost-btn" id="btn-cipher-dcode" title="Open the right dCode page with ciphertext auto-filled in the textarea">
+                  dCode
+                </button>
+                <button type="button" class="ghost-btn" id="btn-cipher-cyberchef" title="Open CyberChef with clipboard text">
+                  CyberChef
+                </button>
+                <button
+                  type="button"
+                  class="ghost-btn"
+                  id="btn-cipher-cli"
+                  title="Send clipboard to local hunt-cli (native messaging or :8746 serve). Runs Ciphey + HODOR/Morse/Base64 fallbacks."
+                >
+                  CLI decode
+                </button>
+              </div>
+              <div id="cipher-cli-status" class="cipher-cli-status" hidden aria-live="polite"></div>
               <div id="cipher-guesses" class="cipher-guesses" hidden></div>
               <div id="cipher-cards" class="cipher-grid"></div>
             </div>
@@ -697,6 +986,293 @@
             </div>
           </details>
 
+          <details class="panel" id="panel-checklist" data-panel="panel-checklist">
+            <summary>
+              <span class="summary-label">Cryptic checklist</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="Zero-spoiler discipline guide for DTC/BOT-style hunts. Checkboxes persist locally — progress only, no hunt answers."
+                aria-label="Help: Cryptic hunt discipline checklist."
+              >
+                ?
+              </button>
+            </summary>
+            <div class="panel-body">
+              <ul id="checklist-items" class="checklist"></ul>
+            </div>
+          </details>
+
+          <details class="panel" id="panel-cryptic-guide" data-panel="panel-cryptic-guide">
+            <summary>
+              <span class="summary-label">Cryptic Guide</span>
+              <button
+                type="button"
+                class="help-tip"
+                title="BOT / Paradigm-style hunt playbook — output types, hop discipline, mod rel? lanes, tool map. Reference only; no spoilers."
+                aria-label="Help: Cryptic hunt playbook reference."
+              >
+                ?
+              </button>
+            </summary>
+            <div class="panel-body cryptic-guide">
+              <h2 class="guide-title">Cryptic hunt playbook</h2>
+              <p class="guide-lede">BOT / Paradigm-style OSINT — what to find, which direction, when to stop.</p>
+
+              <hr class="guide-hr" />
+
+              <h3 class="guide-h2">The two questions (say out loud every hop)</h3>
+              <ol class="guide-ol">
+                <li><strong>What am I trying to produce right now?</strong></li>
+                <li><strong>What evidence says this lane is live?</strong></li>
+              </ol>
+
+              <hr class="guide-hr" />
+
+              <h3 class="guide-h2">Hunt flow mindmap</h3>
+              <pre class="guide-mindmap mono" aria-label="Hunt flow mindmap">NEW CLUE / ARTIFACT
+        ↓
+LEVEL NAME = theme compass (rose, voice, Folly…)
+        ↓
+WHAT OUTPUT TYPE?  ← most stalls happen here
+        ↓
+GIVEN only (file, page source, mod hint — not wiki essays)
+        ↓
+ONE action (one search OR one page OR one decode)
+        ↓
+VERIFY lane (mod rel? / teammate / theme fit)
+        ↓
+NEXT hop ──────────────┐
+        or             │
+SUBMIT answer          │
+(lowercase, no spaces) │
+        └──────────────┘
+              (loop back to OUTPUT TYPE)</pre>
+              <p class="guide-rules"><strong>Rules:</strong> Given beats derived · One hop = one output · Theme fit check</p>
+
+              <hr class="guide-hr" />
+
+              <h3 class="guide-h2">At level start</h3>
+              <ul class="guide-tasks">
+                <li><span class="guide-box" aria-hidden="true"></span> Read level <strong>NAME</strong> (e.g. rose, voice) — not internal labels</li>
+                <li><span class="guide-box" aria-hidden="true"></span> List <strong>GIVEN</strong> artifacts: filename, URL, page HTML, Discord text</li>
+                <li><span class="guide-box" aria-hidden="true"></span> Name the <strong>ONE</strong> output type you need next (see table below)</li>
+                <li><span class="guide-box" aria-hidden="true"></span> Assign roles: <strong>feeder</strong> (tabs) + <strong>closer</strong> (types output, calls rel?)</li>
+              </ul>
+
+              <h3 class="guide-h2">Every hop (30s team sync)</h3>
+              <ul class="guide-tasks">
+                <li><span class="guide-box" aria-hidden="true"></span> We have: <code class="inline">[paste artifact]</code></li>
+                <li><span class="guide-box" aria-hidden="true"></span> Next output is: slug / phrase / person / decode / ID / final</li>
+                <li><span class="guide-box" aria-hidden="true"></span> One try: single search OR one page OR one decode</li>
+                <li><span class="guide-box" aria-hidden="true"></span> Stop if: wrong theme, mod irrel, or merged two hops</li>
+                <li><span class="guide-box" aria-hidden="true"></span> Before submit: lowercase, no spaces, team confirms</li>
+              </ul>
+
+              <hr class="guide-hr" />
+
+              <h3 class="guide-h2">Output types — pick ONE before you search</h3>
+              <div class="guide-table-wrap">
+                <table class="guide-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>You get…</th>
+                      <th>Then you…</th>
+                      <th>Example</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Backlink slug</td>
+                      <td><code class="inline">/word</code> path</td>
+                      <td>Open hunt.site/slug, view-source</td>
+                      <td><code class="inline">/redgod</code>, <code class="inline">/p47p52</code></td>
+                    </tr>
+                    <tr>
+                      <td>Search phrase</td>
+                      <td>Exact words to Google</td>
+                      <td>Quote-search; not wiki essays</td>
+                      <td><code class="inline">to the stars</code></td>
+                    </tr>
+                    <tr>
+                      <td>Named entity</td>
+                      <td>Person, org, title</td>
+                      <td>Find their <em>weird</em> association</td>
+                      <td>TTSA, Amy Eskridge</td>
+                    </tr>
+                    <tr>
+                      <td>Decode</td>
+                      <td>Hidden string</td>
+                      <td>Use as next input, not decoration</td>
+                      <td>HODOR cipher, Base64 highlight</td>
+                    </tr>
+                    <tr>
+                      <td>Media artifact</td>
+                      <td>Image/audio bytes</td>
+                      <td>Decode first, match elsewhere</td>
+                      <td>SSTV rabbit, morse.wav</td>
+                    </tr>
+                    <tr>
+                      <td>Platform ID</td>
+                      <td>Numeric/token ID</td>
+                      <td>Open correct platform + feature</td>
+                      <td>IG highlight, Genius ID</td>
+                    </tr>
+                    <tr>
+                      <td>Structured extract</td>
+                      <td>P/L/W/L, coords, barcode</td>
+                      <td>Follow hunt rules exactly</td>
+                      <td>book cipher, geohash</td>
+                    </tr>
+                    <tr>
+                      <td>Final answer</td>
+                      <td>lowercase, no spaces</td>
+                      <td>Team confirm, then submit</td>
+                      <td><code class="inline">echoesofyourname</code></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h3 class="guide-h2">Direction branches</h3>
+              <h4 class="guide-h3">Last artifact → next tool</h4>
+              <div class="guide-table-wrap">
+                <table class="guide-table">
+                  <thead>
+                    <tr>
+                      <th>You have…</th>
+                      <th>Go…</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Riddle / prose</td>
+                      <td>Title or concept search</td>
+                    </tr>
+                    <tr>
+                      <td><code class="inline">/slug</code> page</td>
+                      <td>View-source, audio, comments, <code class="inline">/s/</code> paths</td>
+                    </tr>
+                    <tr>
+                      <td>Cipher output</td>
+                      <td>Exact phrase search (not Wikipedia rabbit hole)</td>
+                    </tr>
+                    <tr>
+                      <td>Person / org</td>
+                      <td>Niche wiki, credits, scandal — not generic bio</td>
+                    </tr>
+                    <tr>
+                      <td>Media file</td>
+                      <td>SSTV, spectrogram, metadata, LSB before guessing</td>
+                    </tr>
+                    <tr>
+                      <td>Social token</td>
+                      <td>Platform-specific (Song DNA, YT comments, IG highlight)</td>
+                    </tr>
+                    <tr>
+                      <td>Filename</td>
+                      <td>Often <em>is</em> the clue (<code class="inline">oneword.mp4</code>, <code class="inline">I'm Deranged</code>)</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h4 class="guide-h3">Kill a branch when…</h4>
+              <ul class="guide-list">
+                <li>Mod says <strong>irrel</strong></li>
+                <li>Does not fit level <strong>NAME</strong> / theme</li>
+                <li>You merged two hops (wiki + song + slug at once)</li>
+                <li>Output type unclear — pause, don't open more tabs</li>
+                <li>Generic popular page with no hunt-specific tie</li>
+                <li>Platform front page with nothing hunt-specific (e.g. Travis Scott Spotify)</li>
+              </ul>
+
+              <hr class="guide-hr" />
+
+              <h3 class="guide-h2">On every backlink page</h3>
+              <ul class="guide-tasks">
+                <li><span class="guide-box" aria-hidden="true"></span> View page source (Ctrl+U) — HTML comments, hidden <code class="inline">/s/</code> paths</li>
+                <li><span class="guide-box" aria-hidden="true"></span> Reveal hidden layers / contrast / aria-hidden</li>
+                <li><span class="guide-box" aria-hidden="true"></span> Download linked media — check filename + extension</li>
+                <li><span class="guide-box" aria-hidden="true"></span> Run audio/image through SSTV, spectrogram, exiftool, steghide</li>
+                <li><span class="guide-box" aria-hidden="true"></span> Classify strings: Base64, cipher, geohash, snowflake, ISBN</li>
+              </ul>
+
+              <h3 class="guide-h2">Mod / team discipline</h3>
+              <ul class="guide-tasks">
+                <li><span class="guide-box" aria-hidden="true"></span> Ask <strong>rel?</strong> on the <strong>lane</strong>, not the answer</li>
+                <li><span class="guide-box" aria-hidden="true"></span> <strong>rel</strong> = keep going | <strong>rel but not final</strong> = right thread, wrong depth</li>
+                <li><span class="guide-box" aria-hidden="true"></span> <strong>irrel</strong> = kill branch immediately</li>
+                <li><span class="guide-box" aria-hidden="true"></span> Named <code class="inline">/slug</code> in hint = you need that backlink page</li>
+                <li><span class="guide-box" aria-hidden="true"></span> Paste concrete artifact when asking (URL, decode, theory)</li>
+              </ul>
+
+              <hr class="guide-hr" />
+
+              <h3 class="guide-h2">Tool quick map</h3>
+              <div class="guide-table-wrap">
+                <table class="guide-table">
+                  <thead>
+                    <tr>
+                      <th>Signal</th>
+                      <th>Tool / action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Audio squeal / picture in audio</td>
+                      <td>SSTV decode (QSSTV, MMSSTV)</td>
+                    </tr>
+                    <tr>
+                      <td>Dots and dashes</td>
+                      <td>Morse decode</td>
+                    </tr>
+                    <tr>
+                      <td>Hodor-like repetition</td>
+                      <td>HODOR cipher / dCode</td>
+                    </tr>
+                    <tr>
+                      <td><code class="inline">eyJ…</code> or <code class="inline">/s/</code> path</td>
+                      <td>Base64 decode</td>
+                    </tr>
+                    <tr>
+                      <td>HTML empty page</td>
+                      <td>View source, comments, zero-width</td>
+                    </tr>
+                    <tr>
+                      <td>Image feels loaded</td>
+                      <td>exiftool, steghide, strings, StegStruck</td>
+                    </tr>
+                    <tr>
+                      <td><code class="inline">gcp…</code> / <code class="inline">u4pru…</code></td>
+                      <td>Geohash decode</td>
+                    </tr>
+                    <tr>
+                      <td>Long number in URL</td>
+                      <td>Genius annotation, Discord snowflake, Scratch ID</td>
+                    </tr>
+                    <tr>
+                      <td>TXT in DNS hint</td>
+                      <td><code class="inline">dig</code> / <code class="inline">nslookup</code> TXT record</td>
+                    </tr>
+                    <tr>
+                      <td>Passworded paste</td>
+                      <td>Try hunt themes; check filename hints</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <hr class="guide-hr" />
+
+              <h3 class="guide-h2">Team roles (Encore-style)</h3>
+              <p class="guide-roles"><strong>Feeder</strong> opens tabs and drops links.<br />
+              <strong>Closer</strong> names the output type, runs the 30s sync, and calls mod <strong>rel?</strong> before the team burns time.<br />
+              One theory per hop until verified.</p>
+            </div>
+          </details>
+
           <details class="panel" id="panel-dns" data-panel="panel-dns">
             <summary>
               <span class="summary-label">DNS Inspector</span>
@@ -731,6 +1307,10 @@
     </main>
 
     <script src="zip-archive.js"></script>
+    <script src="artifact-classifier.js"></script>
+    <script src="id-router-patterns.js"></script>
+    <script src="media-local.js"></script>
+    <script src="image-local.js"></script>
     <script src="sidebar.js"></script>
   </body>
 </html>

@@ -13,6 +13,26 @@ Unified Firefox sidebar for cryptic hunts and light OSINT: live page scanning, b
 
 Temporary add-ons unload when Firefox restarts — load `manifest.json` again after a restart. After code changes, use **Reload** on the extension card in `about:debugging`.
 
+### Heavy media → Hunt CLI
+
+For **full-file strings**, **SSTV**, spectrogram exports, Morse-from-audio, image ELA/LSB without browser limits:
+
+```powershell
+cd hunt-cli
+pip install -r requirements.txt
+python -m hunt_cli analyze path\to\clue.wav
+```
+
+**Cipher decode from the sidebar** — one-time native messaging setup (no server to keep running):
+
+```powershell
+python -m hunt_cli install-native
+```
+
+Reload Hunt Engine in `about:debugging`, then use **CLI decode** in Cipher Clipboard. Hunt-cli runs **Ciphey** when installed, plus HODOR / Morse / Base64 / hex / ROT13. Fallback: `python -m hunt_cli serve` on port **8746** (StegStruck uses **8745**).
+
+See `hunt-cli/README.md`. Deep stego: `stegstruck` (`python -m stegstruck scan …`).
+
 Requires Firefox **121+**. Restricted pages (`about:`, `addons.mozilla.org`, Firefox UI) do not run content scripts — scan and reveal are unavailable there.
 
 ---
@@ -31,10 +51,10 @@ Tools are nested under four accordion groups:
 
 | Group | Tools |
 |-------|--------|
-| **Hunt** | Backlink Identifier (Pin stays in top chrome) |
-| **Page** | Live Assets (incl. response headers), Redirect Log |
-| **Media** | Image Asset (reverse, Forensics+, **StegStruck**, Hex/strings/edit, Split, Meta); **Audio Asset** (strings/ID3, Morse decode, deep tools); Last download / Archive (ZIP comment + encryption) |
-| **Decode** | Cipher Clipboard, Notes, Geohash, DNS |
+| **Hunt** | Backlink Identifier, **ID Router**, **Paste / dead-drop** (Pin + Auto-probe in top chrome) |
+| **Page** | Live Assets (artifact chips, **Scan source**, hidden content), Redirect Log |
+| **Media** | Image Asset; **Audio Asset**; **Video / comments**; Last download / Archive |
+| **Decode** | Cipher Clipboard (incl. **CLI decode** / hunt-cli, quipqiup/dCode/CyberChef links), Notes, **Cryptic checklist**, **Cryptic Guide**, Geohash, DNS |
 
 ---
 
@@ -52,9 +72,30 @@ Tools are nested under four accordion groups:
 
 **What it does.** Pins the active tab into a hunt base set used by **ID-mode** probes. Always stores the **origin/root**, plus any **path variants** you pin on that host. Example: pin `https://coreisus.com/Mains` → bases are `coreisus.com` and `coreisus.com/Mains`. Pin another path on the same host (e.g. `/Extra`) to accumulate it. Pinning a **different** host replaces the set. ID probes try paste-style paths under **every** saved base: `/{id}`, `/raw/{id}`, `/p/{id}`, `/a/{id}`, `/file/{id}`, `/paste/{id}` (same paths are also tried on the **current site** origin). When the active tab is under a directory (e.g. `/practice/` or `/practice/index.html`), those same templates are also tried under that directory — even if the hunt base pin is host-only — so you get `/practice/{id}`, `/practice/p/{id}`, etc. Duplicate candidate URLs are skipped.
 
-**How to use.** Navigate to the hunt home or a section URL → **Pin**. Label shows the host, or `host · N bases` when multiple paths are saved (hover for the full list). **Clear** (next to Search in Backlink Identifier) removes the whole set. Same-host **Pin** adds the current path; it does not wipe prior paths.
+**How to use.** Navigate to the hunt home or a section URL → **Pin**. Label shows the host, or `host · N bases` when multiple paths are saved (hover for the full list). **×** next to the label clears the whole pinned set. **Clear** (next to Search in Backlink Identifier) stops an in-progress probe and clears results — it does not unpin the hunt base. Same-host **Pin** adds the current path; it does not wipe prior paths.
 
 **Tips.** Pin the contest origin first, then pin important subpaths as you discover them. You cannot pin `about:` / internal URLs. Username mode also probes this-site and hunt-base paths (`/{username}`, `/user/{username}`, `/u/{username}`, `/profile/{username}`, plus the same paste-style templates as ID mode). On local practice under `/practice/`, probe a token without re-pinning — path-aware “this site” / hunt-base probes pick up the directory automatically (status line shows e.g. `7 under /practice`). Directory probes also try `/{id}.html` for static pages. Soft-404 HTML on this-site/hunt-base paths is filtered (not confirmed).
+
+### Auto-probe hunt site
+
+**What it does.** When **Auto-probe hunt** is ON (top chrome, default ON), Hunt Engine checks **only your pinned hunt base** — not Reddit, Wikipedia, the leads bot, or whatever tab you are reading. Triggers:
+
+| Source | Behavior |
+|--------|----------|
+| **Text selection** | Highlight a single token/word (≥ 2 chars, no spaces) — debounced ~400 ms. Lowercase words like `giraffe` are allowed; common English stopwords are skipped. |
+| **HTML comments** | Live Assets comment scan extracts token-like strings (≥ 3 chars, skips IE conditionals) and probes them the same way. |
+
+Uses the same path templates and soft-404 filtering as manual Backlink Identifier (`/{id}`, `/p/{id}`, `/raw/{id}`, …). Each token is probed **once per page per session** (dedup cache).
+
+**On hit.** Sidebar toast: `Hunt hit: /giraffe → cryptic.example/giraffe` (green). Backlink Identifier badge flashes `!`. **Browser notification** when the extension has permission.
+
+**While probing.** Blue toast: `Probing hunt site: /redgod …` (selection only).
+
+**On miss.** Gray toast: `No hunt hit for /redgod on pinned origin` — so silent misses are visible.
+
+**Rapid selections.** Highlight `redgod`, then `giraffe` within a second — both probe in parallel (each token once per page). Trailing `?` / punctuation is stripped (`redgod?` → `redgod`).
+
+**How to use.** **Pin** the real hunt origin first (where `/slug` pages live). Highlight suspect words from context on any page, or rely on comment auto-probe after **Rescan page**. If nothing is pinned, auto-probe does nothing. Turn off **Auto-probe hunt** to disable selection and comment probes.
 
 ### Auto-ingest downloads
 
@@ -64,7 +105,7 @@ Tools are nested under four accordion groups:
 |----------|-------------|
 | ZIP / JAR / APK (RAR/7z stubbed) | **Media → Last download / Archive** (re-fetch ≤ ~16 MB for EOCD comment + encryption) |
 | PNG / JPG / GIF / WEBP / BMP | **Media → Image Asset** (sets the asset; kicks Hex/strings when the URL is http(s)) |
-| MP3 / WAV / OGG / M4A / FLAC / AAC / WEBM (audio) | **Media → Audio Asset** (re-fetch ≤ ~8 MB; kicks Strings/ID3 when http(s)) |
+| MP3 / WAV / OGG / M4A / FLAC / AAC / WEBM (audio) | **Media → Audio Asset** (re-fetch ≤ ~16 MB for Strings/ID3; local tools up to ~32 MB) |
 | TXT / CSV / JSON / MD / LOG / NFO | **Decode → Cipher Clipboard** (re-fetch ≤ ~512 KB) + a short Notes line |
 
 A toast like `Download: clue.mp3 → Audio` explains the jump. `blob:` / `file:` URLs cannot always be re-fetched — the right panel still focuses with a drop/paste hint. Turn **Auto-ingest** off to stop watching downloads (preference saved in `storage.local`).
@@ -94,29 +135,79 @@ Also lists **Candidates on page** — token-shaped strings scraped from the page
 
 **Tips.** Prefer right-click **Probe as Backlink ID** / **Probe as Username** on selected text. Expand **Checked / filtered** to see *why* a host was discarded. Blocked ≠ miss — open and verify by hand. Candidates live under this panel but are filled by the Live Assets scan.
 
+### ID Router
+
+**What it does.** Pattern-based “what is this string?” — Discord snowflake, YouTube ID, Pastebin slug, geohash, ISBN, UUID, Reddit id, etc. Shows canonical URLs + **Probe** (full Backlink Identifier) without running probes until you click.
+
+**How to use.** Paste or right-click selection → **Identify string in Hunt Engine (ID router)**. Click **Open** / **Copy** / **Probe** on matched cards.
+
+### Paste / dead-drop
+
+**What it does.** Fetches paste-style URLs or bare IDs (256 KB cap). Warns on password-protected pages. `#tag` chips can be probed as backlink IDs.
+
+**How to use.** Paste URL or ID → **Fetch**. Right-click paste links → **Open paste link in Hunt Engine**. Right-click selection → **Open in Paste panel**.
+
+### Live Assets — artifact chips & hidden content
+
+**Artifact chips** (blue = sure, gray = maybe, green = confirmed hunt hit) appear on Live Assets rows, candidates, and comment workspace. Click a chip to jump to Cipher, DNS, Geohash, Paste panel, ID router, Video lane, or hunt-site auto-probe.
+
+**Hidden content** section merges:
+- **DOM scan** — HTML comments, previously hidden (after Reveal), zero-width
+- **Source scan** — from **Scan source** (re-fetches HTML, lists comments/CSS-hidden/odd meta; 256 KB cap)
+
+**Media filenames & alt** — `img[alt]`, download filenames, media src basenames.
+
+**Book tip** (static): chapter title + page number — search inside archive preview.
+
+### Video / comments
+
+**What it does.** Loads video title/author via noembed (no API key). **Open comments** for YouTube/Vimeo templates. **Comment workspace** — paste comment text when platforms block scraping; artifact chips classify pasted text.
+
+**How to use.** Paste video URL → **Load**, or click **Video** handoff on a Live Assets media row.
+
+### Cryptic checklist
+
+Zero-spoiler discipline list for DTC/BOT-style hunts (pin origin, view-source, video comments, homophones, concat passwords, one concrete `rel?`). Checkboxes persist locally — progress only.
+
+### Cryptic Guide
+
+Static playbook for BOT / Paradigm-style hunts: the two questions per hop, output-type table, direction branches, mod `rel?` discipline, and tool quick map. Reference only — no hunt spoilers. Scroll inside the panel when expanded.
+
+### Cipher Clipboard — hunt-cli & deep links
+
+Niche ciphers (e.g. HODOR) are **not** built-in decoders — use the **dCode** button (opens the right tool page and auto-fills `#cipher_identifier_ciphertext` or the matching field).
+
+**CLI decode** sends clipboard text to local **hunt-cli** via Firefox native messaging (`python -m hunt_cli install-native`) or HTTP fallback (`python -m hunt_cli serve` on `:8746`). Runs Ciphey when installed; shows results as a cipher card.
+
+**quipqiup**, **dCode**, **CyberChef** open external tools. **dCode** auto-fills the ciphertext textarea via a content script on `dcode.fr` — it waits for dCode’s page scripts, then replaces any saved form state in localStorage so old paste URLs do not stick.
+
 ### Image Asset
 
 **What it does.** Holds one captured image URL and offers reverse search, forensics handoff, filename probe, hex / strings / edit+preview, **Split** (concatenated-file extract), and light **Meta** (EXIF / PNG text).
 
-**How to use.** Right-click an image on a page → **Send image URL to Hunt Engine** (or any reverse/forensics/probe image menu — those also capture the URL). Then use:
+**How to use.** Right-click an image → **Send image URL to Hunt Engine** (or any reverse/forensics/probe image menu — those also capture the URL). Or **drop / choose a local file** in the Image Asset drop zone (same as Audio). Then use:
 
 | Button | Action |
 |--------|--------|
 | **Open** | Open the image URL |
 | **Copy URL** | Copy to clipboard |
 | **Lens / Yandex / TinEye** | Open reverse search by URL |
-| **Forensics+** | Opens Forensically, Jeffrey’s EXIF (URL prefilled), and FotoForensics in background tabs; copies the image URL (fallback **Copy image URL** if copy fails). Forensically/FotoForensics often still need a manual drop/paste. |
+| **ELA** | **Local** Error Level Analysis — recompresses as JPEG and amplifies pixel differences (best on JPEG; CORS/tainted canvas may block remote URLs — drop file if needed) |
+| **LSB** | **Local** least-significant-bit planes for R/G/B bits 0–1 |
+| **Channels** | **Local** RGB channel split |
+| **Forensics** | **Local ELA** in-panel — image is fetched and analyzed automatically (also runs on right-click → ELA analysis) |
+| **External sites** | Optional: opens Forensically, Jeffrey’s EXIF, FotoForensics in background tabs (manual upload often still required) |
 | **StegStruck** | Sends the image to the local StegStruck pipeline (`http://127.0.0.1:8745`) and opens the live report. Requires StegStruck running (`cd stegstruck && python -m stegstruck serve`). Same idea as right-click → **Scan with StegStruck (local)**. |
 | **Probe filename** | Strips the last path segment’s extension and runs Backlink ID probe |
 | **Hex / strings** | Fetches the image (≤ ~8 MB), lists printable / trailing strings (Cipher / Probe / Notes handoff), shows head/tail 256-byte hex dumps, an **editable** hex region (full file if ≤ ~2 MB; otherwise last 64 KB only — labeled), and auto-scans for **concatenated** payloads. **Apply / Patch** re-fetches, splices your bytes, shows an `<img>` preview, and **Download patched**. PNG CRC may break if you corrupt chunks — download is still allowed. |
 | **Split** | Same fetch/scan as Hex, focused on glued files: second JPEG after `FF D9`, PNG/GIF/ZIP/PDF magics, etc. Shows “Concatenated file detected @ 0x…” with **Download part 1 / 2**, **Preview both** (image types), and **Split all** when more than two segments. |
 | **Meta** | Light client-side parse: JPEG EXIF (ImageDescription / UserComment / etc.) and PNG tEXt / iTXt (zTXt noted if compressed). Shown under the same Image Asset card |
 
-**Tips.** Filename tokens (e.g. `corridor-nr00k7px.svg` → `nr00k7px`) are a common hunt hop — use Probe filename early. Reverse search needs a publicly fetchable URL. Use **Hex / strings**, **Split**, or **Meta** when you suspect embedded text, a file glued after EOI/IEND, or EXIF clues — not a full ELA / stego suite. Hex edit is for trailing payloads / small binary tweaks, not a full hex editor. Classic theme: JPEG + second JPEG (or ZIP) after the first `FF D9` — **Split** → download part 2.
+**Tips.** Filename tokens (e.g. `corridor-nr00k7px.svg` → `nr00k7px`) are a common hunt hop — use Probe filename early. Reverse search needs a publicly fetchable URL. Use **ELA / LSB / Channels** for quick in-panel forensics; **Forensics+** for heavier external suites. Use **Hex / strings**, **Split**, or **Meta** when you suspect embedded text, a file glued after EOI/IEND, or EXIF clues. Hex edit is for trailing payloads / small binary tweaks, not a full hex editor. Classic theme: JPEG + second JPEG (or ZIP) after the first `FF D9` — **Split** → download part 2.
 
 ### Audio Asset
 
-**What it does.** Holds one captured audio/video URL (or a dropped local file) and offers lightweight byte analysis plus external tool handoffs.
+**What it does.** Holds one captured audio/video URL (or a dropped local file) and offers lightweight byte analysis, **local** spectrogram/Morse/SSTV tools, plus optional external tool handoffs.
 
 **How to use.** Right-click `<audio>` / `<video>` (or an `.mp3`/`.wav`/… link) → **Send audio URL to Hunt Engine**. Live Assets lists **Audio / video on page** with an **Audio** handoff. After a download, auto-ingest jumps here when the file is audio.
 
@@ -124,13 +215,17 @@ Also lists **Candidates on page** — token-shaped strings scraped from the page
 |--------|--------|
 | **Open** | Open the audio URL |
 | **Copy URL** | Copy to clipboard |
-| **Strings / ID3** | Fetches the file (≤ ~8 MB), lists printable strings (trailing payload / embedded text), parses basic **MP3 ID3** (title, artist, comment — comments often hide passwords/clues) |
+| **Strings / ID3** | Fetches the file (≤ ~16 MB), lists printable strings (trailing payload / embedded text), parses basic **MP3 ID3** (title, artist, comment — comments often hide passwords/clues). Larger files: use **Spectrogram / Morse decode / SSTV** (up to ~32 MB). |
 | **Probe filename** | Strips the path segment extension and runs Backlink ID probe |
-| **Spectrogram wiki / Spectrum / dCode Morse / SSTV** | Opens external tools in **background tabs** only (`tabs.create`, never `window.open`) so the sidebar panel and Audio Asset stay put; upload the audio on those sites manually |
+| **Spectrogram** | **Local** STFT heatmap in-panel — **auto-runs** when audio is captured (Web Audio decode; up to ~90 s) |
+| **Morse decode** | **Local** experimental tone-burst Morse decoder — click result to send to Cipher |
+| **Spectrogram / Morse decode** | **Local** in-panel tools |
+| **SSTV (local)** | Experimental Scottie S1 in-panel; full Robot 36 / VIS via **hunt-cli** (`python -m hunt_cli sstv file.wav`) |
+| **Audacity wiki / Spectrum / dCode Morse** | Optional external tools (dCode Morse auto-fills when Morse was decoded in-panel) |
 
 Morse-like text in strings or ID3 shows a **Morse →** chip — click to send to **Cipher → Morse decode** and see the result inline. Drop a local file when the URL is `blob:` / `file:` / expired — the sidebar `<audio>` preview plays it (blob URL + session metadata), and Strings/ID3 still run. Local preview bytes are kept in the sidebar for the session; after an extension reload, re-drop the file to play again.
 
-**Tips.** Hunt audio clues are often spectrogram/Morse/SSTV — use the deep-tool row (background tabs; panel stays put), then finish upload on the external site. ID3 **Comment** frames are a common password stash. For video-only pages, `<video src>` is captured too. If play fails, the status line shows **preview unavailable**.
+**Tips.** Hunt audio clues are often spectrogram/Morse — spectrogram **loads automatically** when you capture audio. Use **Morse decode** for tone bursts. External row is optional. ID3 **Comment** frames are a common password stash.
 
 ### Last download / Archive
 
@@ -265,6 +360,9 @@ Each result can go to **Cipher** or **Probe**, or click the value to copy.
 | **Probe as Username** | Username-mode probe |
 | **DNS lookup in Hunt Engine** | Normalizes to a domain and looks up DNS |
 | **Resolve geohash / coords in Hunt Engine** | Fills Geohash panel and resolves |
+| **Identify string in Hunt Engine (ID router)** | Opens ID Router with selection |
+| **Open in Paste panel** | Opens Paste panel with selection |
+| **Open paste link in Hunt Engine** | Opens Paste panel with link URL |
 
 ### Image
 
@@ -311,14 +409,18 @@ python server.py
 - Arena: http://127.0.0.1:8765/  
 - **Neon Rook** practice hunt: http://127.0.0.1:8765/practice/
 
+**Mechanic stations** (under `/practice/station-*.html`): paste, page source, video/comments, ID router, HODOR, DNS workflow.
+
 Pin `http://127.0.0.1:8765` as hunt base when probing demo paste tokens. See `demo/README.md` for station list and a spoilered solve path (fiction only — not a live contest).
+
+**Feature caps:** paste fetch and page source scan ≤ 256 KB; paste/tag extraction heuristic only; ID router patterns may false-positive (labeled “maybe” on artifact chips).
 
 ---
 
 ## What it does **not** do
 
-- Full steganography solvers inside the extension — use **StegStruck** (local companion app) from Image Asset / right-click for the parallel pipeline. In-panel **Hex / strings**, **Split**, and **Meta** stay as light peeks. **Audio Asset** does strings + basic MP3 ID3 + Morse chip handoff — not local spectrogram/Morse/SSTV decoding (use the deep-tool row). **Last download / Archive** reads ZIP comments / encryption flags only (not RAR/7z comments, not password recovery).
-- Heavy EXIF/ELA analysis inside the extension — Forensics+ opens external tools; in-panel Meta is a lightweight peek.
+- Full steganography solvers inside the extension — use **StegStruck** (local companion app) from Image Asset / right-click for the parallel pipeline. In-panel **Hex / strings**, **Split**, **Meta**, **ELA / LSB / Channels** are lightweight peeks. **Audio Asset** does strings + basic MP3 ID3 + Morse chip handoff + **local** spectrogram/Morse/SSTV (experimental; external row remains for hard cases). **Last download / Archive** reads ZIP comments / encryption flags only (not RAR/7z comments, not password recovery).
+- Heavy EXIF/ELA analysis — in-panel **ELA** is a quick JPEG-oriented peek; **Forensics+** opens external suites for deeper work.
 - Confirming login-walled social posts as “exists” without you opening them.
 - Scanning or revealing on Firefox internal / AMO pages.
 - Network cipher services — all Cipher Clipboard work is local.

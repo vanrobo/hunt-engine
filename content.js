@@ -24,12 +24,17 @@
     RESCAN: "RESCAN",
     PROBE_PAGE_CHECK: "PROBE_PAGE_CHECK",
     CIPHER_INPUT: "CIPHER_INPUT",
+    AUTO_PROBE_SELECTION: "AUTO_PROBE_SELECTION",
   };
 
   const AUTO_DECODE_KEY = "cipherAutoDecode";
+  const AUTO_PROBE_HUNT_KEY = "autoProbeHuntSite";
   const AUTO_DECODE_DEBOUNCE_MS = 350;
+  const AUTO_PROBE_DEBOUNCE_MS = 400;
   const AUTO_DECODE_MIN = 4;
+  const AUTO_PROBE_MIN = 2;
   const AUTO_DECODE_MAX = 2000;
+  const AUTO_PROBE_MAX = 64;
 
   const STYLE_ID = "hunt-engine-reveal";
   const ATTR_WAS_HIDDEN = "data-hunt-was-hidden";
@@ -515,6 +520,47 @@
     return found;
   }
 
+  const MAX_MEDIA_ALT = 40;
+
+  function collectMediaAlt() {
+    const found = [];
+    const seen = new Set();
+    function push(text, source, tag) {
+      const t = String(text || "").trim();
+      if (!t || t.length < 2 || seen.has(t) || found.length >= MAX_MEDIA_ALT) return;
+      seen.add(t);
+      found.push({
+        text: t,
+        preview: (tag ? tag + " · " : "") + t.slice(0, 120),
+        source,
+        tag,
+      });
+    }
+    try {
+      document.querySelectorAll("img[alt]").forEach((el) => {
+        push(el.getAttribute("alt"), "img alt", "img");
+      });
+      document.querySelectorAll("img[title], video[title], audio[title]").forEach((el) => {
+        push(el.getAttribute("title"), "media title", el.tagName.toLowerCase());
+      });
+      document.querySelectorAll("a[download]").forEach((el) => {
+        push(el.getAttribute("download") || "", "download attr", "a");
+      });
+      document.querySelectorAll("img[src], video[src], audio[src]").forEach((el) => {
+        const src = el.getAttribute("src") || "";
+        try {
+          const base = decodeURIComponent(new URL(src, location.href).pathname.split("/").pop() || "");
+          if (base && base.length >= 3) push(base, "filename", el.tagName.toLowerCase());
+        } catch (_err) {
+          /* ignore */
+        }
+      });
+    } catch (_err) {
+      /* ignore */
+    }
+    return found;
+  }
+
   function classifyBacklink(rawUrl) {
     let url = String(rawUrl || "").trim();
     if (!url) return null;
@@ -729,6 +775,7 @@
       const blobs = collectTextBlobs();
       const backlinks = collectBacklinks(blobs);
       const mediaUrls = collectMediaUrls();
+      const mediaAlt = collectMediaAlt();
       const candidates = collectCandidates(blobs);
       const payload = {
         type: MSG.LIVE_ASSETS,
@@ -742,6 +789,7 @@
         revealedHidden: revealEnabled ? collectRevealedHidden() : [],
         backlinks,
         mediaUrls,
+        mediaAlt,
         candidates,
       };
 
@@ -754,6 +802,7 @@
         r: payload.revealedHidden.length,
         k: payload.backlinks.length,
         v: payload.mediaUrls.length,
+        a: payload.mediaAlt.length,
         n: payload.candidates.length,
         u: payload.frameUrl,
         sample: (
@@ -1371,11 +1420,16 @@
 
   // -------------------------------------------------------------------------
   // Auto-decode selection → Cipher Clipboard (heuristic-gated)
+  // Auto-probe selection → hunt-site backlink fast path (background)
   // -------------------------------------------------------------------------
 
   let autoDecodeEnabled = true;
+  let autoProbeHuntEnabled = true;
   let autoDecodeTimer = 0;
+  /** @type {Map<string, number>} */
+  const autoProbeTimers = new Map();
   let lastAutoDecodeSent = "";
+  const AUTO_PROBE_TOKEN_GAP_MS = 120;
 
   function looksEncoded(raw) {
     const t = String(raw || "").trim();
@@ -1501,6 +1555,49 @@
     }
   }
 
+  function normalizeSelectionForProbe(raw) {
+    let s = String(raw || "").trim();
+    if (!s) return "";
+    s = s.replace(/^[\s"'<(]+|[\s"'?)!.,;:>]+$/g, "");
+    return s;
+  }
+
+  function looksHuntProbeable(raw) {
+    const t = normalizeSelectionForProbe(raw);
+    if (t.length < AUTO_PROBE_MIN || t.length > AUTO_PROBE_MAX) return false;
+    if (/\s/.test(t)) return false;
+    return /^[A-Za-z0-9_-]+$/.test(t);
+  }
+
+  function sendHuntProbeSelection(raw) {
+    if (!autoProbeHuntEnabled) return;
+    const text = normalizeSelectionForProbe(raw);
+    if (!text || !looksHuntProbeable(text)) return;
+
+    browser.runtime
+      .sendMessage({
+        type: MSG.AUTO_PROBE_SELECTION,
+        text,
+        pageUrl: location.href,
+      })
+      .catch(() => {});
+  }
+
+  function scheduleAutoProbeForToken(raw) {
+    const text = normalizeSelectionForProbe(raw);
+    if (!text || !looksHuntProbeable(text)) return;
+
+    const key = text.toLowerCase();
+    const existing = autoProbeTimers.get(key);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(() => {
+      autoProbeTimers.delete(key);
+      sendHuntProbeSelection(text);
+    }, AUTO_PROBE_TOKEN_GAP_MS);
+    autoProbeTimers.set(key, timer);
+  }
+
   function maybeSendSelection() {
     if (!autoDecodeEnabled) return;
     const text = readSelectionText();
@@ -1543,28 +1640,49 @@
         if (!(ev.ctrlKey || ev.metaKey) || (k !== "A" && k !== "a")) return;
       }
     }
+    const captured = readSelectionText();
     scheduleAutoDecode();
+    if (captured) scheduleAutoProbeForToken(captured);
   }
 
-  async function loadAutoDecodeSetting() {
+  async function loadAutoSelectionSettings() {
     try {
-      const bag = await browser.storage.local.get(AUTO_DECODE_KEY);
+      const bag = await browser.storage.local.get([
+        AUTO_DECODE_KEY,
+        AUTO_PROBE_HUNT_KEY,
+      ]);
       if (typeof bag[AUTO_DECODE_KEY] === "boolean") {
         autoDecodeEnabled = bag[AUTO_DECODE_KEY];
       } else {
         autoDecodeEnabled = true;
       }
+      if (typeof bag[AUTO_PROBE_HUNT_KEY] === "boolean") {
+        autoProbeHuntEnabled = bag[AUTO_PROBE_HUNT_KEY];
+      } else {
+        autoProbeHuntEnabled = true;
+      }
     } catch (_err) {
       autoDecodeEnabled = true;
+      autoProbeHuntEnabled = true;
     }
   }
 
   try {
     browser.storage.onChanged.addListener((changes, area) => {
-      if (area !== "local" || !changes[AUTO_DECODE_KEY]) return;
-      const next = changes[AUTO_DECODE_KEY].newValue;
-      autoDecodeEnabled = typeof next === "boolean" ? next : true;
-      if (!autoDecodeEnabled) lastAutoDecodeSent = "";
+      if (area !== "local") return;
+      if (changes[AUTO_DECODE_KEY]) {
+        const next = changes[AUTO_DECODE_KEY].newValue;
+        autoDecodeEnabled = typeof next === "boolean" ? next : true;
+        if (!autoDecodeEnabled) lastAutoDecodeSent = "";
+      }
+      if (changes[AUTO_PROBE_HUNT_KEY]) {
+        const next = changes[AUTO_PROBE_HUNT_KEY].newValue;
+        autoProbeHuntEnabled = typeof next === "boolean" ? next : true;
+        if (!autoProbeHuntEnabled) {
+          for (const t of autoProbeTimers.values()) clearTimeout(t);
+          autoProbeTimers.clear();
+        }
+      }
     });
   } catch (_err) {
     /* ignore */
@@ -1578,7 +1696,7 @@
   // -------------------------------------------------------------------------
 
   syncRevealFromBackground();
-  loadAutoDecodeSetting();
+  loadAutoSelectionSettings();
   scanAndReport();
 
   const observer = new MutationObserver(() => scheduleScan());

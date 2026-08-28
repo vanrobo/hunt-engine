@@ -26,15 +26,32 @@
     "open_at_install": true
   },
   "background": {
-    "scripts": ["zip-archive.js", "background.js"],
+    "scripts": [
+      "zip-archive.js",
+      "artifact-classifier.js",
+      "id-router-patterns.js",
+      "background.js"
+    ],
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["artifact-classifier.js", "id-router-patterns.js", "content.js"],
       "run_at": "document_idle",
       "all_frames": true
+    },
+    {
+      "matches": ["*://*.dcode.fr/*"],
+      "js": ["dcode-fill-logic.js", "dcode-fill.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["*://29a.ch/*", "*://*.29a.ch/*"],
+      "js": ["forensically-fill.js"],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ],
   "permissions": [
@@ -45,11 +62,16 @@
     "menus",
     "activeTab",
     "clipboardWrite",
-    "downloads"
+    "downloads",
+    "notifications",
+    "nativeMessaging",
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>",
     "http://127.0.0.1:8745/*",
-    "http://localhost:8745/*"
+    "http://localhost:8745/*",
+    "http://127.0.0.1:8746/*",
+    "http://localhost:8746/*"
   ]
 }

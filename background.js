@@ -22,6 +22,13 @@ if (typeof importScripts === "function" && typeof ZIP_ARCHIVE === "undefined") {
     /* ignore */
   }
 }
+if (typeof importScripts === "function" && typeof ArtifactClassifier === "undefined") {
+  try {
+    importScripts("artifact-classifier.js", "id-router-patterns.js");
+  } catch (_err) {
+    /* ignore */
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Message / storage contracts (keep in sync with sidebar.js + content.js)
@@ -39,6 +46,7 @@ const MSG = {
   PROBE_BACKLINK: "PROBE_BACKLINK",
   PROBE_PROGRESS: "PROBE_PROGRESS",
   PROBE_RESULT: "PROBE_RESULT",
+  CANCEL_PROBE: "CANCEL_PROBE",
   PROBE_PAGE_CHECK: "PROBE_PAGE_CHECK",
   PIN_HUNT_BASE: "PIN_HUNT_BASE",
   CLEAR_HUNT_BASE: "CLEAR_HUNT_BASE",
@@ -50,6 +58,9 @@ const MSG = {
   IMAGE_EXTRACT_PART: "IMAGE_EXTRACT_PART",
   IMAGE_META: "IMAGE_META",
   STEGSTRUCK_SCAN: "STEGSTRUCK_SCAN",
+  HUNT_CLI_DECODE: "HUNT_CLI_DECODE",
+  DCODE_OPEN: "DCODE_OPEN",
+  FORENSICALLY_LOAD: "FORENSICALLY_LOAD",
   AUDIO_ASSET: "AUDIO_ASSET",
   AUDIO_ANALYZE: "AUDIO_ANALYZE",
   AUDIO_CAPTURE: "AUDIO_CAPTURE",
@@ -61,6 +72,15 @@ const MSG = {
   ARCHIVE_INFO: "ARCHIVE_INFO",
   ANALYZE_ARCHIVE: "ANALYZE_ARCHIVE",
   CLEAR_PENDING_INGEST: "CLEAR_PENDING_INGEST",
+  AUTO_PROBE_SELECTION: "AUTO_PROBE_SELECTION",
+  HUNT_PROBE_HIT: "HUNT_PROBE_HIT",
+  HUNT_PROBE_START: "HUNT_PROBE_START",
+  HUNT_PROBE_MISS: "HUNT_PROBE_MISS",
+  FETCH_PASTE: "FETCH_PASTE",
+  FETCH_PAGE_SOURCE: "FETCH_PAGE_SOURCE",
+  FETCH_VIDEO_META: "FETCH_VIDEO_META",
+  ID_ROUTER_INPUT: "ID_ROUTER_INPUT",
+  PASTE_OPEN: "PASTE_OPEN",
 };
 
 const STORE = {
@@ -76,8 +96,8 @@ const STORE = {
   ARCHIVE: "archiveInfo", // last ZIP/archive inspect result
 };
 
-/** Re-fetch cap for audio download / URL analysis (~8 MB). */
-const AUDIO_MAX_BYTES = 8 * 1024 * 1024;
+/** Re-fetch cap for audio Strings/ID3 analysis (~16 MB). */
+const AUDIO_MAX_BYTES = 16 * 1024 * 1024;
 
 /** Re-fetch cap for download / URL archive inspection (~16 MB). */
 const ARCHIVE_MAX_BYTES = 16 * 1024 * 1024;
@@ -85,6 +105,8 @@ const ARCHIVE_MAX_BYTES = 16 * 1024 * 1024;
 const TEXT_INGEST_MAX_BYTES = 512 * 1024;
 /** storage.local — default ON when unset. */
 const AUTO_INGEST_KEY = "autoIngestDownloads";
+/** storage.local — auto backlink probe on selection + HTML comments (hunt site only). */
+const AUTO_PROBE_HUNT_KEY = "autoProbeHuntSite";
 
 const MENU_CIPHER = "send-to-hunt-engine";
 const MENU_PROBE = "probe-backlink-id";
@@ -102,9 +124,18 @@ const MENU_AUDIO_SEND = "audio-send-hunt";
 
 /** Local StegStruck pipeline (must be running separately). */
 const STEGSTRUCK_BASE = "http://127.0.0.1:8745";
+/** Local hunt-cli decode bridge — native messaging (preferred) or HTTP serve (:8746). */
+const HUNT_CLI_BASE = "http://127.0.0.1:8746";
+const HUNT_CLI_NATIVE = "hunt_cli";
+const DCODE_FILL_KEY = "huntDcodePending";
+const FORENSICALLY_FILL_KEY = "huntForensicsPending";
+const FORENSICALLY_BASE = "https://29a.ch/photo-forensics/";
 const STEGSTRUCK_MAX_BYTES = 16 * 1024 * 1024;
 const MENU_AUDIO_PROBE = "audio-probe-token";
 const MENU_LINK_AUDIO = "link-audio-hunt";
+const MENU_ID_ROUTER = "id-router-hunt";
+const MENU_PASTE = "paste-panel-hunt";
+const MENU_PASTE_LINK = "paste-link-hunt";
 const MAX_CHAINS = 40;
 const INTERNAL_URL = /^(about:|moz-extension:|chrome:|resource:|devtools:)/i;
 
@@ -250,6 +281,7 @@ function flattenAssets(tabAssets) {
     revealedHidden: [],
     backlinks: [],
     mediaUrls: [],
+    mediaAlt: [],
     candidates: [],
     pageUrl: "",
     updatedAt: 0,
@@ -264,6 +296,7 @@ function flattenAssets(tabAssets) {
   const revealedHidden = [];
   const backlinks = [];
   const mediaUrls = [];
+  const mediaAlt = [];
   const candidates = [];
 
   for (const [frameKey, payload] of Object.entries(tabAssets.frames)) {
@@ -292,6 +325,9 @@ function flattenAssets(tabAssets) {
     for (const item of payload.mediaUrls || []) {
       mediaUrls.push({ ...item, frame });
     }
+    for (const item of payload.mediaAlt || []) {
+      mediaAlt.push({ ...item, frame });
+    }
     for (const item of payload.candidates || []) {
       candidates.push({ ...item, frame });
     }
@@ -306,6 +342,7 @@ function flattenAssets(tabAssets) {
     revealedHidden,
     backlinks,
     mediaUrls,
+    mediaAlt,
     candidates,
     pageUrl: tabAssets.pageUrl || "",
     updatedAt: tabAssets.updatedAt || 0,
@@ -344,6 +381,29 @@ function ensureMenus() {
       contexts: ["selection"],
     });
     browser.menus.create({
+      id: MENU_ID_ROUTER,
+      title: "Identify string in Hunt Engine (ID router)",
+      contexts: ["selection"],
+    });
+    browser.menus.create({
+      id: MENU_PASTE,
+      title: "Open in Paste panel",
+      contexts: ["selection"],
+    });
+    browser.menus.create({
+      id: MENU_PASTE_LINK,
+      title: "Open paste link in Hunt Engine",
+      contexts: ["link"],
+      targetUrlPatterns: [
+        "*://pastebin.com/*",
+        "*://rentry.co/*",
+        "*://rentry.org/*",
+        "*://controlc.com/*",
+        "*://telegra.ph/*",
+        "*://gist.github.com/*",
+      ],
+    });
+    browser.menus.create({
       id: MENU_IMG_SEND,
       title: "Send image URL to Hunt Engine",
       contexts: ["image"],
@@ -365,7 +425,7 @@ function ensureMenus() {
     });
     browser.menus.create({
       id: MENU_IMG_FORENSICS,
-      title: "Open in forensics tools (Forensically+)",
+      title: "ELA analysis in Hunt Engine (in-panel)",
       contexts: ["image"],
     });
     browser.menus.create({
@@ -436,13 +496,12 @@ function reverseSearchUrls(imageUrl) {
   };
 }
 
-/** Best-effort forensics suite: Forensically (drag-drop) + URL EXIF + FotoForensics. */
+/** URL-based forensics tools (Forensically is piped separately with file upload). */
 function forensicsToolUrls(imageUrl) {
   const q = encodeURIComponent(imageUrl);
   return [
-    "https://29a.ch/photo-forensics/#forensic",
     "https://exif.regex.info/exif.cgi?imgurl=" + q,
-    "https://fotoforensics.com/",
+    "https://fotoforensics.com/?url=" + q,
   ];
 }
 
@@ -665,12 +724,10 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     }
     if (info.menuItemId === MENU_IMG_FORENSICS) {
       const asset = await captureImageAsset(imageUrl, pageUrl);
-      openForensicsTabs(imageUrl);
       await notifySidebar({
         type: MSG.IMAGE_FORENSICS,
         imageAsset: asset,
-        copyUrl: imageUrl,
-        toolCount: 3,
+        runLocalEla: true,
       });
       return;
     }
@@ -729,6 +786,27 @@ browser.menus.onClicked.addListener(async (info, tab) => {
 
   if (info.menuItemId === MENU_GEOHASH) {
     await notifySidebar({ type: MSG.GEOHASH_INPUT, text });
+    return;
+  }
+
+  if (info.menuItemId === MENU_ID_ROUTER) {
+    await openSidebarSafe();
+    await notifySidebar({ type: MSG.ID_ROUTER_INPUT, text });
+    return;
+  }
+
+  if (info.menuItemId === MENU_PASTE) {
+    await openSidebarSafe();
+    await notifySidebar({ type: MSG.PASTE_OPEN, text });
+    return;
+  }
+
+  if (info.menuItemId === MENU_PASTE_LINK) {
+    const linkUrl = (info.linkUrl || "").trim();
+    if (!linkUrl) return;
+    await openSidebarSafe();
+    await notifySidebar({ type: MSG.PASTE_OPEN, url: linkUrl });
+    return;
   }
 });
 
@@ -929,50 +1007,68 @@ async function sendImageToStegStruck(imageUrl, opts) {
   }
 
   let bytes;
-  let contentType = "application/octet-stream";
-  try {
-    const res = await fetch(imageUrl, {
-      method: "GET",
-      credentials: "omit",
-      cache: "no-store",
-      redirect: "follow",
-    });
-    if (!res.ok) {
-      return { ok: false, error: "Could not fetch image (HTTP " + res.status + ")" };
-    }
-    const cl = Number(res.headers.get("content-length") || 0);
-    if (cl > STEGSTRUCK_MAX_BYTES) {
-      return { ok: false, error: "Image too large for StegStruck upload (>16 MB)" };
-    }
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength > STEGSTRUCK_MAX_BYTES) {
-      return { ok: false, error: "Image too large for StegStruck upload (>16 MB)" };
-    }
-    if (!buf.byteLength) {
+  let contentType = o.contentType || "application/octet-stream";
+  let filename = o.filename || "image.bin";
+
+  if (o.bytes) {
+    const raw = o.bytes instanceof ArrayBuffer ? new Uint8Array(o.bytes) : o.bytes;
+    if (!raw || !raw.byteLength) {
       return { ok: false, error: "Empty image — drop the file in StegStruck instead" };
     }
-    bytes = buf;
-    contentType = res.headers.get("content-type") || contentType;
-  } catch (_err) {
-    return {
-      ok: false,
-      error: "Could not fetch image (blob/expired URL?). Open StegStruck and drop the file.",
-    };
-  }
+    if (raw.byteLength > STEGSTRUCK_MAX_BYTES) {
+      return { ok: false, error: "Image too large for StegStruck upload (>16 MB)" };
+    }
+    bytes = raw.buffer ? raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) : raw;
+    if (!/\.[A-Za-z0-9]{2,5}$/.test(filename)) {
+      if (/png/i.test(contentType)) filename += ".png";
+      else if (/gif/i.test(contentType)) filename += ".gif";
+      else if (/webp/i.test(contentType)) filename += ".webp";
+      else filename += ".jpg";
+    }
+  } else {
+    try {
+      const res = await fetch(imageUrl, {
+        method: "GET",
+        credentials: "omit",
+        cache: "no-store",
+        redirect: "follow",
+      });
+      if (!res.ok) {
+        return { ok: false, error: "Could not fetch image (HTTP " + res.status + ")" };
+      }
+      const cl = Number(res.headers.get("content-length") || 0);
+      if (cl > STEGSTRUCK_MAX_BYTES) {
+        return { ok: false, error: "Image too large for StegStruck upload (>16 MB)" };
+      }
+      const buf = await res.arrayBuffer();
+      if (buf.byteLength > STEGSTRUCK_MAX_BYTES) {
+        return { ok: false, error: "Image too large for StegStruck upload (>16 MB)" };
+      }
+      if (!buf.byteLength) {
+        return { ok: false, error: "Empty image — drop the file in StegStruck instead" };
+      }
+      bytes = buf;
+      contentType = res.headers.get("content-type") || contentType;
+    } catch (_err) {
+      return {
+        ok: false,
+        error: "Could not fetch image (blob/expired URL?). Open StegStruck and drop the file.",
+      };
+    }
 
-  let filename = "image.bin";
-  try {
-    const u = new URL(imageUrl);
-    const base = (u.pathname.split("/").pop() || "").split("?")[0];
-    if (base) filename = base.slice(0, 120);
-  } catch (_err) {
-    /* keep default */
-  }
-  if (!/\.[A-Za-z0-9]{2,5}$/.test(filename)) {
-    if (/png/i.test(contentType)) filename += ".png";
-    else if (/gif/i.test(contentType)) filename += ".gif";
-    else if (/webp/i.test(contentType)) filename += ".webp";
-    else filename += ".jpg";
+    try {
+      const u = new URL(imageUrl);
+      const base = (u.pathname.split("/").pop() || "").split("?")[0];
+      if (base) filename = base.slice(0, 120);
+    } catch (_err) {
+      /* keep default */
+    }
+    if (!/\.[A-Za-z0-9]{2,5}$/.test(filename)) {
+      if (/png/i.test(contentType)) filename += ".png";
+      else if (/gif/i.test(contentType)) filename += ".gif";
+      else if (/webp/i.test(contentType)) filename += ".webp";
+      else filename += ".jpg";
+    }
   }
 
   const form = new FormData();
@@ -999,6 +1095,331 @@ async function sendImageToStegStruck(imageUrl, opts) {
   const ui = STEGSTRUCK_BASE + "/?job=" + encodeURIComponent(job.id);
   browser.tabs.create({ url: ui, active: true });
   return { ok: true, jobId: job.id, ui: ui, filename: job.filename || filename };
+}
+
+function bytesToBase64(bytes) {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+async function fetchForensicsImageBytes(url) {
+  const res = await fetch(url, { credentials: "omit", cache: "no-store" });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/**
+ * Open Forensically (29a.ch) and inject the hunt image via file input.
+ */
+async function openForensicallyWithImage(opts) {
+  const options = opts || {};
+  const tool = options.tool || "error-level-analysis";
+  const hash = "#forensic-" + tool;
+  let bytes;
+  let filename = options.filename || "hunt-image.jpg";
+  let mime = options.contentType || "image/jpeg";
+
+  if (options.buffer instanceof ArrayBuffer) {
+    bytes = new Uint8Array(options.buffer);
+  } else if (options.url) {
+    bytes = await fetchForensicsImageBytes(String(options.url).trim());
+    try {
+      const u = new URL(options.url);
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts.length) {
+        filename =
+          decodeURIComponent(parts[parts.length - 1].split("?")[0].split("#")[0]) || filename;
+      }
+    } catch (_err) {
+      /* keep default filename */
+    }
+  } else {
+    return { ok: false, error: "No image URL or buffer" };
+  }
+
+  if (!bytes || !bytes.length) {
+    return { ok: false, error: "Empty image" };
+  }
+
+  const base64 = bytesToBase64(bytes);
+  const target = FORENSICALLY_BASE + hash;
+  await browser.storage.session.set({
+    [FORENSICALLY_FILL_KEY]: {
+      base64,
+      filename,
+      mime,
+      tool,
+      ts: Date.now(),
+    },
+  });
+
+  const tab = await browser.tabs.create({ url: target, active: true });
+  let loaded = false;
+
+  const tryLoad = async (tabId) => {
+    if (loaded) return true;
+    try {
+      const res = await browser.tabs.sendMessage(tabId, {
+        type: "HUNT_FORENSICALLY_LOAD",
+        base64,
+        filename,
+        mime,
+        tool,
+      });
+      if (res && res.ok) {
+        loaded = true;
+        return true;
+      }
+    } catch (_err) {
+      /* content script not ready */
+    }
+    return false;
+  };
+
+  [0, 300, 800, 1500, 3000, 5000].forEach((ms) => {
+    setTimeout(() => tryLoad(tab.id), ms);
+  });
+
+  return { ok: true, tabId: tab.id, url: target };
+}
+
+/**
+ * Open a dCode tool tab and inject ciphertext into the main textarea.
+ */
+async function openDcodeWithAutofill(url, text) {
+  const payload = String(text || "").trim();
+  const target = String(url || "").trim();
+  if (!target) {
+    return { ok: false, error: "No dCode URL" };
+  }
+  await browser.storage.session.set({
+    [DCODE_FILL_KEY]: { text: payload, url: target, ts: Date.now() },
+  });
+  const tab = await browser.tabs.create({ url: target, active: true });
+  let filled = false;
+
+  const injectFill = async (tabId) => {
+    if (!browser.scripting || !browser.scripting.executeScript) return false;
+    try {
+      await browser.scripting.executeScript({
+        target: { tabId },
+        files: ["dcode-fill-logic.js"],
+      });
+      const injected = await browser.scripting.executeScript({
+        target: { tabId },
+        func: async (value) => {
+          if (!globalThis.HuntDcodeFillLogic) return false;
+          return globalThis.HuntDcodeFillLogic.fillWhenReady(value, {
+            timeoutMs: 8000,
+            delayAfterReadyMs: 180,
+          });
+        },
+        args: [payload],
+      });
+      return Boolean(injected && injected[0] && injected[0].result);
+    } catch (_inj) {
+      return false;
+    }
+  };
+
+  const tryFill = async (tabId) => {
+    if (filled) return true;
+    try {
+      const res = await browser.tabs.sendMessage(tabId, {
+        type: "HUNT_DCODE_FILL",
+        text: payload,
+        url: target,
+      });
+      if (res && res.ok) {
+        filled = true;
+        return true;
+      }
+    } catch (_err) {
+      /* content script not ready */
+    }
+    if (await injectFill(tabId)) {
+      filled = true;
+      return true;
+    }
+    return false;
+  };
+
+  const scheduleFills = (tabId) => {
+    [0, 400, 900, 1500, 2500, 4000, 6000, 9000, 12000, 16000].forEach((ms) => {
+      setTimeout(() => tryFill(tabId), ms);
+    });
+  };
+
+  const onUpdated = (tabId, info) => {
+    if (tabId !== tab.id) return;
+    if (info.status === "loading") return;
+    scheduleFills(tabId);
+    if (info.status === "complete") {
+      browser.tabs.onUpdated.removeListener(onUpdated);
+    }
+  };
+  browser.tabs.onUpdated.addListener(onUpdated);
+  scheduleFills(tab.id);
+  return { ok: true, tabId: tab.id, fillScheduled: true };
+}
+
+/**
+ * Send a JSON message to hunt-cli via Firefox native messaging.
+ * Requires: python -m hunt_cli install-native
+ */
+function callNativeHuntCli(payload) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let port;
+    const finish = (msg) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        if (port) port.disconnect();
+      } catch (_err) {
+        /* ignore */
+      }
+      resolve(msg);
+    };
+    try {
+      port = browser.runtime.connectNative(HUNT_CLI_NATIVE);
+    } catch (err) {
+      resolve({
+        ok: false,
+        nativeError: true,
+        error: (err && err.message) || "connectNative failed",
+      });
+      return;
+    }
+    const timer = setTimeout(
+      () =>
+        finish({
+          ok: false,
+          nativeError: true,
+          error: "Hunt CLI native host timeout (120s)",
+        }),
+      120000
+    );
+    port.onMessage.addListener((msg) => finish(msg));
+    port.onDisconnect.addListener(() => {
+      if (settled) return;
+      const errMsg =
+        browser.runtime.lastError && browser.runtime.lastError.message;
+      finish({
+        ok: false,
+        nativeError: true,
+        error:
+          errMsg ||
+          "Native host disconnected — run: cd hunt-cli && python -m hunt_cli install-native",
+      });
+    });
+    port.postMessage(payload);
+  });
+}
+
+/**
+ * Decode ciphertext via hunt-cli (native messaging, then HTTP serve fallback).
+ */
+async function sendCipherToHuntCli(text, opts) {
+  const o = opts || {};
+  const payload = String(text || "").trim();
+  if (!payload) {
+    return { ok: false, error: "Empty cipher clipboard — paste text first" };
+  }
+  if (payload.length > 8192) {
+    return { ok: false, error: "Text too long for hunt-cli decode (max 8192 chars)" };
+  }
+
+  const native = await callNativeHuntCli({
+    action: "decode",
+    text: payload,
+    tool: o.tool || "auto",
+  });
+  if (native && !native.nativeError) {
+    return {
+      ok: Boolean(native.ok),
+      decode: native.decode,
+      best: native.best,
+      cipheyAvailable: Boolean(native.ciphey_available),
+      transport: native.transport || "native",
+      error:
+        native.ok
+          ? ""
+          : native.error ||
+            (native.decode &&
+              native.decode.results &&
+              native.decode.results[0] &&
+              native.decode.results[0].detail) ||
+            "No decode hit (try dCode / CyberChef or install Ciphey)",
+    };
+  }
+
+  try {
+    const health = await fetch(HUNT_CLI_BASE + "/api/health", {
+      method: "GET",
+      cache: "no-store",
+    });
+    if (!health.ok) {
+      return {
+        ok: false,
+        error:
+          (native && native.error) ||
+          "hunt-cli not available. Run: cd hunt-cli && python -m hunt_cli install-native",
+      };
+    }
+  } catch (_err) {
+    return {
+      ok: false,
+      error:
+        (native && native.error) ||
+        "hunt-cli offline. Install native host: python -m hunt_cli install-native (or python -m hunt_cli serve)",
+    };
+  }
+
+  let result;
+  try {
+    const res = await fetch(HUNT_CLI_BASE + "/api/decode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: payload,
+        tool: o.tool || "auto",
+      }),
+      cache: "no-store",
+    });
+    const bodyText = await res.text();
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: "hunt-cli decode failed: " + (bodyText || res.status),
+      };
+    }
+    try {
+      result = JSON.parse(bodyText);
+    } catch (_parseErr) {
+      return { ok: false, error: "hunt-cli returned invalid JSON" };
+    }
+  } catch (_err) {
+    return { ok: false, error: "hunt-cli decode request failed — is serve still running?" };
+  }
+
+  return {
+    ok: Boolean(result && result.ok),
+    decode: result,
+    best: result && result.best,
+    cipheyAvailable: Boolean(result && result.ciphey_available),
+    transport: "http",
+    error:
+      result && result.ok
+        ? ""
+        : (result && result.results && result.results[0] && result.results[0].detail) ||
+          "No decode hit (try dCode / CyberChef or install Ciphey)",
+  };
 }
 
 function extractPrintableStrings(bytes, minLen) {
@@ -1276,14 +1697,20 @@ function detectConcatenatedSplits(bytes) {
  * Extract a byte range from a fetched image (≤ IMAGE_HEX_MAX_BYTES).
  */
 async function extractImagePart(imageUrl, offset, length, mimeHint) {
+  const fetched = await fetchImageBytes(imageUrl);
+  if (!fetched.ok) return fetched;
+  return extractImagePartFromBytes(fetched.bytes, offset, length, mimeHint, {
+    url: imageUrl,
+  });
+}
+
+function extractImagePartFromBytes(bytes, offset, length, mimeHint, meta) {
+  const m = meta || {};
   const off = Number(offset);
   const len = Number(length);
   if (!Number.isFinite(off) || off < 0 || !Number.isFinite(len) || len <= 0) {
     return { ok: false, error: "Invalid offset/length" };
   }
-  const fetched = await fetchImageBytes(imageUrl);
-  if (!fetched.ok) return fetched;
-  const bytes = fetched.bytes;
   if (off >= bytes.length) {
     return { ok: false, error: "Offset past end of file" };
   }
@@ -1291,7 +1718,7 @@ async function extractImagePart(imageUrl, offset, length, mimeHint) {
   const slice = bytes.subarray(off, end);
   return {
     ok: true,
-    url: imageUrl,
+    url: m.url || m.filename || "local",
     offset: off,
     size: slice.length,
     contentType: mimeHint || "application/octet-stream",
@@ -1302,7 +1729,14 @@ async function extractImagePart(imageUrl, offset, length, mimeHint) {
 async function analyzeImageHex(imageUrl) {
   const fetched = await fetchImageBytes(imageUrl);
   if (!fetched.ok) return fetched;
-  const bytes = fetched.bytes;
+  return analyzeImageHexFromBytes(fetched.bytes, {
+    url: imageUrl,
+    contentType: fetched.contentType || "",
+  });
+}
+
+function analyzeImageHexFromBytes(bytes, meta) {
+  const m = meta || {};
   const size = bytes.length;
   const headLen = Math.min(256, size);
   const tailLen = Math.min(256, size);
@@ -1351,10 +1785,10 @@ async function analyzeImageHex(imageUrl) {
 
   return {
     ok: true,
-    url: imageUrl,
+    url: m.url || m.filename || "local",
     size,
     truncated: false,
-    contentType: fetched.contentType || "",
+    contentType: m.contentType || "",
     headHex: bytesToHexDump(headBytes, 0),
     tailHex: bytesToHexDump(tailBytes, tailStart),
     strings,
@@ -1367,6 +1801,7 @@ async function analyzeImageHex(imageUrl) {
     concatenated: splitInfo.concatenated,
     markers: splitInfo.markers,
     logicalEnd: splitInfo.logicalEnd,
+    local: Boolean(m.local),
   };
 }
 
@@ -1374,12 +1809,19 @@ async function analyzeImageHex(imageUrl) {
  * Re-fetch image, replace bytes from editOffset through EOF with parsed hex, return patched file.
  */
 async function patchImageHex(imageUrl, editOffset, editHex) {
+  const fetched = await fetchImageBytes(imageUrl);
+  if (!fetched.ok) return fetched;
+  return patchImageHexFromBytes(fetched.bytes, editOffset, editHex, {
+    url: imageUrl,
+    contentType: fetched.contentType || "application/octet-stream",
+  });
+}
+
+function patchImageHexFromBytes(bytes, editOffset, editHex, meta) {
+  const m = meta || {};
   const parsed = parseEditableHex(editHex);
   if (!parsed.ok) return parsed;
 
-  const fetched = await fetchImageBytes(imageUrl);
-  if (!fetched.ok) return fetched;
-  const bytes = fetched.bytes;
   const size = bytes.length;
   const off = Number(editOffset);
   if (!Number.isFinite(off) || off < 0 || off > size) {
@@ -1393,12 +1835,12 @@ async function patchImageHex(imageUrl, editOffset, editHex) {
 
   return {
     ok: true,
-    url: imageUrl,
+    url: m.url || m.filename || "local",
     size: patched.length,
     originalSize: size,
     editOffset: off,
     editSize: newEdit.length,
-    contentType: fetched.contentType || "application/octet-stream",
+    contentType: m.contentType || "application/octet-stream",
     base64: uint8ToBase64(patched),
   };
 }
@@ -1623,30 +2065,23 @@ function extractImageMetaFields(bytes) {
 }
 
 async function analyzeImageMeta(imageUrl) {
-  const res = await fetch(imageUrl, {
-    method: "GET",
-    credentials: "omit",
-    cache: "no-store",
-    redirect: "follow",
+  const fetched = await fetchImageBytes(imageUrl);
+  if (!fetched.ok) return fetched;
+  return analyzeImageMetaFromBytes(fetched.bytes, {
+    url: imageUrl,
+    contentType: fetched.contentType || "",
   });
-  if (!res.ok) {
-    return { ok: false, error: "HTTP " + res.status + " fetching image" };
-  }
-  const cl = Number(res.headers.get("content-length") || 0);
-  if (cl > 8 * 1024 * 1024) {
-    return { ok: false, error: "Image too large for in-extension meta peek" };
-  }
-  const buf = await res.arrayBuffer();
-  if (buf.byteLength > 8 * 1024 * 1024) {
-    return { ok: false, error: "Image too large for in-extension meta peek" };
-  }
-  const bytes = new Uint8Array(buf);
+}
+
+function analyzeImageMetaFromBytes(bytes, meta) {
+  const m = meta || {};
   return {
     ok: true,
-    url: imageUrl,
+    url: m.url || m.filename || "local",
     size: bytes.length,
-    contentType: res.headers.get("content-type") || "",
+    contentType: m.contentType || "",
     fields: extractImageMetaFields(bytes),
+    local: Boolean(m.local),
   };
 }
 
@@ -4189,6 +4624,490 @@ function priorityOfLabel(label) {
   return found && found.priority != null ? found.priority : 9;
 }
 
+// ---------------------------------------------------------------------------
+// Hunt-site auto probe (selection + Live Assets comments) — fast path only
+// ---------------------------------------------------------------------------
+
+/** Top English stopwords — lowercase-only tokens in this set are skipped. */
+const HUNT_PROBE_STOPWORDS = new Set([
+  "a",
+  "about",
+  "after",
+  "all",
+  "also",
+  "an",
+  "and",
+  "any",
+  "are",
+  "as",
+  "at",
+  "back",
+  "be",
+  "because",
+  "been",
+  "but",
+  "by",
+  "can",
+  "come",
+  "could",
+  "did",
+  "do",
+  "does",
+  "for",
+  "from",
+  "get",
+  "go",
+  "had",
+  "has",
+  "have",
+  "he",
+  "her",
+  "here",
+  "him",
+  "his",
+  "how",
+  "if",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "just",
+  "like",
+  "me",
+  "more",
+  "most",
+  "my",
+  "no",
+  "not",
+  "now",
+  "of",
+  "on",
+  "one",
+  "or",
+  "our",
+  "out",
+  "over",
+  "see",
+  "she",
+  "so",
+  "some",
+  "than",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "there",
+  "these",
+  "they",
+  "this",
+  "to",
+  "too",
+  "up",
+  "us",
+  "was",
+  "we",
+  "were",
+  "what",
+  "when",
+  "which",
+  "who",
+  "will",
+  "with",
+  "would",
+  "you",
+  "your",
+]);
+
+/** Session dedup — same token on the same page is probed once. */
+const huntProbeDedup = new Set();
+
+function isHuntProbeStopword(token) {
+  const t = String(token || "").toLowerCase();
+  if (t.length < 3) return false;
+  return HUNT_PROBE_STOPWORDS.has(t);
+}
+
+/** Permissive token normalizer for hunt-site-only probes (allows lowercase words). */
+function normalizeHuntProbeToken(raw) {
+  let s = String(raw || "").trim();
+  if (!s) return "";
+  s = s.replace(/^<!--\s*|\s*-->$/g, "").trim();
+  s = s.replace(/^[\s"'<(]+|[\s"'?)!.,;:>]+$/g, "");
+  if (!s || s.length < 2 || s.length > 64) return "";
+  if (/\s/.test(s)) return "";
+  if (!/^[A-Za-z0-9_-]+$/.test(s)) return "";
+  if (isHuntProbeStopword(s)) return "";
+  return s;
+}
+
+function extractCommentProbeTokens(commentText) {
+  const t = String(commentText || "").trim();
+  if (t.length < 3) return [];
+  if (/^\[if\s|<!\[endif\]|^\[endif\]/i.test(t)) return [];
+  if (/\[if\s|<!\[endif\]/i.test(t)) return [];
+
+  const out = [];
+  const seen = new Set();
+
+  function add(raw) {
+    const tok = normalizeHuntProbeToken(raw);
+    if (!tok) return;
+    const key = tok.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(tok);
+  }
+
+  if (/^[A-Za-z0-9_-]{3,64}$/.test(t)) add(t);
+
+  const re = /[A-Za-z0-9_-]{3,64}/g;
+  let m;
+  while ((m = re.exec(t))) add(m[0]);
+
+  return out;
+}
+
+function commentLooksProbeable(text) {
+  const t = String(text || "").trim();
+  if (t.length < 3) return false;
+  if (/^\[if\s|<!\[endif\]|^\[endif\]/i.test(t)) return false;
+  if (/\[if\s|<!\[endif\]/i.test(t)) return false;
+  if (!/[A-Za-z0-9]/.test(t)) return false;
+  return extractCommentProbeTokens(t).length > 0;
+}
+
+function buildHuntSiteOnlyTargets(id, pageUrl, huntBase) {
+  const hb = normalizeHuntBase(huntBase);
+  if (!hb || !hb.host) return [];
+  // Auto-probe: pinned hunt base ONLY — never the tab you are reading (Reddit, leads bot, etc.).
+  return buildProbeTargets(id, pageUrl, huntBase, "id").filter(
+    (target) => target.group === "hunt-base"
+  );
+}
+
+function huntProbeHitOnPinnedOrigin(hit, huntBase) {
+  const hb = normalizeHuntBase(huntBase);
+  if (!hb || !hb.origin) return false;
+  const url = (hit && (hit.url || hit.finalUrl)) || "";
+  try {
+    return new URL(url).origin === hb.origin;
+  } catch (_err) {
+    return false;
+  }
+}
+
+async function isAutoProbeHuntEnabled() {
+  try {
+    const bag = await browser.storage.local.get(AUTO_PROBE_HUNT_KEY);
+    return bag[AUTO_PROBE_HUNT_KEY] !== false;
+  } catch (_err) {
+    return true;
+  }
+}
+
+async function notifyHuntProbeStart(token, meta) {
+  const id = String(token || "");
+  await notifySidebar({
+    type: MSG.HUNT_PROBE_START,
+    token: id,
+    toast: "Probing pinned hunt: /" + id + " …",
+    source: (meta && meta.source) || "selection",
+  });
+}
+
+async function notifyHuntProbeMiss(token, meta) {
+  const id = String(token || "");
+  await notifySidebar({
+    type: MSG.HUNT_PROBE_MISS,
+    token: id,
+    toast: "No hunt hit for /" + id + " on pinned origin",
+    source: (meta && meta.source) || "selection",
+  });
+}
+
+async function notifyHuntProbeHit(token, hit, meta) {
+  let path = "/";
+  const url = (hit && (hit.url || hit.finalUrl)) || "";
+  try {
+    const u = new URL(url);
+    path = u.pathname || "/";
+  } catch (_err) {
+    path = "/" + String(token || "");
+  }
+  const toast = "Hunt hit: " + path + " → " + url;
+
+  await notifySidebarReliable({
+    type: MSG.HUNT_PROBE_HIT,
+    token,
+    hit,
+    toast,
+    source: (meta && meta.source) || "selection",
+  });
+
+  try {
+    await browser.notifications.create("hunt-hit-" + Date.now(), {
+      type: "basic",
+      iconUrl: browser.runtime.getURL("icons/icon.svg"),
+      title: "Hunt Engine — backlink hit",
+      message: toast,
+    });
+  } catch (_err) {
+    /* notifications permission denied or unavailable */
+  }
+}
+
+/** Parallel hunt-site probes — each token runs independently (rapid selections queue here). */
+const huntProbeActive = new Set();
+
+async function runHuntSiteProbe(token, pageUrl, meta) {
+  if (!(await isAutoProbeHuntEnabled())) return;
+
+  const id = normalizeHuntProbeToken(token);
+  if (!id) return;
+  if (pageUrl && INTERNAL_URL.test(pageUrl)) return;
+
+  const dedupKey = (pageUrl || "") + "\0" + id.toLowerCase();
+  if (huntProbeActive.has(dedupKey)) return;
+  if (huntProbeDedup.has(dedupKey)) return;
+  huntProbeDedup.add(dedupKey);
+  if (huntProbeDedup.size > 800) {
+    const keep = Array.from(huntProbeDedup).slice(-400);
+    huntProbeDedup.clear();
+    for (const k of keep) huntProbeDedup.add(k);
+  }
+
+  const huntBase = normalizeHuntBase(await storeGetLocal(STORE.HUNT_BASE, null));
+  const targets = buildHuntSiteOnlyTargets(id, pageUrl, huntBase);
+  if (!targets.length) return;
+
+  huntProbeActive.add(dedupKey);
+
+  const notifyMiss = meta && meta.source === "selection";
+  await notifyHuntProbeStart(id, meta);
+
+  const concurrency = 4;
+  let idx = 0;
+  let hitFound = null;
+
+  try {
+    async function worker() {
+      while (idx < targets.length && !hitFound) {
+        const my = idx++;
+        const target = targets[my];
+        const result = await probeOne(target, id);
+        if (result.hit) {
+          hitFound = {
+            label: target.label,
+            group: target.group,
+            url: result.finalUrl || target.url,
+            status: result.status,
+            hit: true,
+            kind: "hit",
+            error: "",
+            priority: target.priority,
+          };
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, targets.length) }, () => worker())
+    );
+
+    if (hitFound && !huntProbeHitOnPinnedOrigin(hitFound, huntBase)) {
+      hitFound = null;
+    }
+
+    if (hitFound) {
+      await notifyHuntProbeHit(id, hitFound, meta);
+    } else if (notifyMiss) {
+      await notifyHuntProbeMiss(id, meta);
+    }
+  } finally {
+    huntProbeActive.delete(dedupKey);
+  }
+}
+
+const PASTE_FETCH_MAX = 256 * 1024;
+const PAGE_SOURCE_MAX = 256 * 1024;
+
+function resolvePasteUrl(raw, pageUrl) {
+  const s = String(raw || "").trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^[a-zA-Z0-9]{8}$/.test(s)) return "https://pastebin.com/raw/" + s;
+  if (/^[a-zA-Z0-9_-]{3,64}$/.test(s)) return "https://rentry.co/" + s + "/raw";
+  return null;
+}
+
+async function fetchPasteContent(urlOrId) {
+  const url = resolvePasteUrl(urlOrId);
+  if (!url) return { ok: false, error: "Unrecognized paste URL or ID" };
+  try {
+    const res = await fetch(url, {
+      credentials: "omit",
+      redirect: "follow",
+      cache: "no-store",
+    });
+    const buf = await res.arrayBuffer();
+    const slice = buf.byteLength > PASTE_FETCH_MAX ? buf.slice(0, PASTE_FETCH_MAX) : buf;
+    const body = new TextDecoder("utf-8", { fatal: false }).decode(slice);
+    const lower = body.toLowerCase();
+    let passwordWarning = "";
+    if (/password|protected|encrypted|login required/i.test(lower)) {
+      passwordWarning = "Possible password-protected paste — try concat prior flags or level titles.";
+    } else if (/<form/i.test(body) && body.length < 2000) {
+      passwordWarning = "HTML form detected — may require a password.";
+    } else if (!body.trim() && res.ok) {
+      passwordWarning = "Empty body — may be protected or expired.";
+    }
+    const tags = [];
+    const tagRe = /#([a-zA-Z0-9_-]{2,32})/g;
+    let m;
+    while ((m = tagRe.exec(body)) && tags.length < 24) {
+      if (!tags.includes(m[1])) tags.push(m[1]);
+    }
+    return {
+      ok: true,
+      url,
+      body,
+      truncated: buf.byteLength > PASTE_FETCH_MAX,
+      passwordWarning,
+      tags,
+    };
+  } catch (err) {
+    return { ok: false, error: (err && err.message) || "Paste fetch failed" };
+  }
+}
+
+function parsePageSourceHtml(html) {
+  const out = { comments: [], hidden: [], meta: [] };
+  const commentRe = /<!--([\s\S]*?)-->/g;
+  let cm;
+  const seenC = new Set();
+  while ((cm = commentRe.exec(html)) && out.comments.length < 80) {
+    const t = cm[1].trim();
+    if (!t || seenC.has(t)) continue;
+    seenC.add(t);
+    out.comments.push(t);
+  }
+  const hiddenRe =
+    /<(div|span|p|section|article)[^>]*(?:style\s*=\s*["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^"']*["']|hidden(?:\s|>|=))[^>]*>([\s\S]*?)<\/\1>/gi;
+  let hm;
+  const seenH = new Set();
+  while ((hm = hiddenRe.exec(html)) && out.hidden.length < 60) {
+    const t = hm[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (t.length < 2 || seenH.has(t)) continue;
+    seenH.add(t);
+    out.hidden.push(t.slice(0, 500));
+  }
+  const metaRe = /<meta[^>]+>/gi;
+  let mm;
+  while ((mm = metaRe.exec(html)) && out.meta.length < 40) {
+    const tag = mm[0];
+    if (/refresh|canonical|og:|twitter:|description|keywords/i.test(tag)) {
+      out.meta.push(tag.slice(0, 240));
+    }
+  }
+  const jsonLdRe = /<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let jm;
+  while ((jm = jsonLdRe.exec(html)) && out.meta.length < 50) {
+    const t = jm[1].trim().slice(0, 300);
+    if (t) out.meta.push("JSON-LD: " + t);
+  }
+  return out;
+}
+
+async function fetchPageSource(pageUrl) {
+  const url = String(pageUrl || "").trim();
+  if (!url || INTERNAL_URL.test(url)) {
+    return { ok: false, error: "Need an http(s) page URL" };
+  }
+  try {
+    const res = await fetch(url, {
+      credentials: "include",
+      redirect: "follow",
+      cache: "no-store",
+    });
+    const buf = await res.arrayBuffer();
+    const slice = buf.byteLength > PAGE_SOURCE_MAX ? buf.slice(0, PAGE_SOURCE_MAX) : buf;
+    const html = new TextDecoder("utf-8", { fatal: false }).decode(slice);
+    const scan = parsePageSourceHtml(html);
+    return { ok: true, scan, truncated: buf.byteLength > PAGE_SOURCE_MAX };
+  } catch (err) {
+    return { ok: false, error: (err && err.message) || "Source fetch failed" };
+  }
+}
+
+function extractYouTubeId(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1).split("/")[0];
+    if (u.searchParams.get("v")) return u.searchParams.get("v");
+    const m = u.pathname.match(/\/embed\/([^/?]+)/);
+    if (m) return m[1];
+  } catch (_err) {
+    /* ignore */
+  }
+  return "";
+}
+
+async function fetchVideoMeta(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return { ok: false, error: "No video URL" };
+  try {
+    const noembed = await fetch(
+      "https://noembed.com/embed?url=" + encodeURIComponent(raw),
+      { cache: "no-store" }
+    );
+    const data = await noembed.json();
+    if (data.error) return { ok: false, error: data.error };
+    const videoId = extractYouTubeId(raw);
+    let commentsUrl = "";
+    if (videoId) {
+      commentsUrl = "https://www.youtube.com/watch?v=" + videoId + "&lc=1";
+    } else if (/vimeo\.com/i.test(raw)) {
+      commentsUrl = raw.split("?")[0] + "#comments";
+    }
+    return {
+      ok: true,
+      title: data.title || "",
+      author: data.author_name || data.author || "",
+      provider: data.provider_name || "",
+      thumbnail: data.thumbnail_url || "",
+      videoId,
+      commentsUrl,
+    };
+  } catch (err) {
+    return { ok: false, error: (err && err.message) || "Video metadata failed" };
+  }
+}
+
+async function probeCommentsFromAssets(tabId, pageUrl, message) {
+  if (!(await isAutoProbeHuntEnabled())) return;
+  const comments = (message && message.comments) || [];
+  if (!comments.length) return;
+
+  const tokens = [];
+  const seen = new Set();
+  for (const item of comments) {
+    const text = item && (item.text != null ? item.text : item.preview);
+    if (!text || !commentLooksProbeable(text)) continue;
+    for (const tok of extractCommentProbeTokens(text)) {
+      const key = tok.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      tokens.push(tok);
+    }
+  }
+
+  for (const tok of tokens.slice(0, 8)) {
+    await runHuntSiteProbe(tok, pageUrl, { source: "comment", tabId });
+  }
+}
+
 async function runBacklinkProbe(id, pageUrl, mode) {
   mode = mode === "username" ? "username" : "id";
   if (probeAbort) {
@@ -4291,15 +5210,36 @@ async function runBacklinkProbe(id, pageUrl, mode) {
 
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
-  if (!probeAbort.aborted) {
-    state.status = "done";
-    state.running = false;
-    state.finishedAt = Date.now();
-    // Cap stored misses for UI
-    state.misses = (state.misses || []).slice(-120);
-    await storeSet(STORE.PROBE, state);
-    await notifySidebar({ type: MSG.PROBE_RESULT, probe: state });
+  if (probeAbort.aborted) {
+    await storeSet(STORE.PROBE, null);
+    await notifySidebar({ type: MSG.PROBE_RESULT, probe: null });
+    return;
   }
+
+  state.status = "done";
+  state.running = false;
+  state.finishedAt = Date.now();
+  // Cap stored misses for UI
+  state.misses = (state.misses || []).slice(-120);
+  await storeSet(STORE.PROBE, state);
+  await notifySidebar({ type: MSG.PROBE_RESULT, probe: state });
+}
+
+async function cancelBacklinkProbe() {
+  if (probeAbort) {
+    try {
+      probeAbort.abort();
+    } catch (_err) {
+      /* ignore */
+    }
+  }
+  const state = await storeGet(STORE.PROBE, null);
+  const wasRunning = Boolean(state && state.running);
+  if (!wasRunning) {
+    await storeSet(STORE.PROBE, null);
+    await notifySidebar({ type: MSG.PROBE_RESULT, probe: null });
+  }
+  return { ok: true, wasRunning };
 }
 
 // ---------------------------------------------------------------------------
@@ -4620,6 +5560,55 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (type === MSG.AUTO_PROBE_SELECTION) {
+    const pageUrl =
+      message.pageUrl || (sender.tab && sender.tab.url) || "";
+    runHuntSiteProbe(message.text, pageUrl, {
+      source: "selection",
+      tabId: sender.tab && sender.tab.id,
+    }).catch(() => {});
+    return;
+  }
+
+  if (type === MSG.FETCH_PASTE) {
+    fetchPasteContent(message.urlOrId)
+      .then(sendResponse)
+      .catch((err) =>
+        sendResponse({ ok: false, error: (err && err.message) || "Paste fetch failed" })
+      );
+    return true;
+  }
+
+  if (type === MSG.FETCH_PAGE_SOURCE) {
+    resolveTabId(message, sender)
+      .then(async (tabId) => {
+        let pageUrl = message.pageUrl || "";
+        if (!pageUrl && tabId != null) {
+          try {
+            const tab = await browser.tabs.get(tabId);
+            pageUrl = tab.url || "";
+          } catch (_err) {
+            /* ignore */
+          }
+        }
+        return fetchPageSource(pageUrl);
+      })
+      .then(sendResponse)
+      .catch((err) =>
+        sendResponse({ ok: false, error: (err && err.message) || "Source scan failed" })
+      );
+    return true;
+  }
+
+  if (type === MSG.FETCH_VIDEO_META) {
+    fetchVideoMeta(message.url)
+      .then(sendResponse)
+      .catch((err) =>
+        sendResponse({ ok: false, error: (err && err.message) || "Video meta failed" })
+      );
+    return true;
+  }
+
   if (type === MSG.CIPHER_INPUT) {
     const text = message.text == null ? "" : String(message.text);
     const fromSidebar = Boolean(sender.url && sender.url.includes("sidebar.html"));
@@ -4708,8 +5697,30 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (type === MSG.IMAGE_HEX) {
     const url = (message.url || "").trim();
+    if (message.buffer instanceof ArrayBuffer) {
+      const bytes = new Uint8Array(message.buffer);
+      if (bytes.byteLength > IMAGE_HEX_MAX_BYTES) {
+        sendResponse({ ok: false, error: "Image too large for in-extension hex peek" });
+        return true;
+      }
+      Promise.resolve(
+        analyzeImageHexFromBytes(bytes, {
+          filename: message.filename || "image",
+          contentType: message.contentType || "",
+          local: true,
+        })
+      )
+        .then((result) => sendResponse(result))
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: (err && err.message) || "Hex analysis failed",
+          })
+        );
+      return true;
+    }
     if (!url) {
-      sendResponse({ ok: false, error: "No image URL" });
+      sendResponse({ ok: false, error: "No image URL or buffer" });
       return true;
     }
     analyzeImageHex(url)
@@ -4725,8 +5736,26 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (type === MSG.IMAGE_HEX_PATCH) {
     const url = (message.url || "").trim();
+    if (message.buffer instanceof ArrayBuffer) {
+      const bytes = new Uint8Array(message.buffer);
+      Promise.resolve(
+        patchImageHexFromBytes(bytes, message.editOffset, message.editHex, {
+          filename: message.filename || "image",
+          contentType: message.contentType || "application/octet-stream",
+          local: true,
+        })
+      )
+        .then((result) => sendResponse(result))
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: (err && err.message) || "Hex patch failed",
+          })
+        );
+      return true;
+    }
     if (!url) {
-      sendResponse({ ok: false, error: "No image URL" });
+      sendResponse({ ok: false, error: "No image URL or buffer" });
       return true;
     }
     patchImageHex(url, message.editOffset, message.editHex)
@@ -4742,8 +5771,25 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (type === MSG.IMAGE_EXTRACT_PART) {
     const url = (message.url || "").trim();
+    if (message.buffer instanceof ArrayBuffer) {
+      const bytes = new Uint8Array(message.buffer);
+      Promise.resolve(
+        extractImagePartFromBytes(bytes, message.offset, message.length, message.mime, {
+          filename: message.filename || "image",
+          local: true,
+        })
+      )
+        .then((result) => sendResponse(result))
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: (err && err.message) || "Part extract failed",
+          })
+        );
+      return true;
+    }
     if (!url) {
-      sendResponse({ ok: false, error: "No image URL" });
+      sendResponse({ ok: false, error: "No image URL or buffer" });
       return true;
     }
     extractImagePart(url, message.offset, message.length, message.mime)
@@ -4759,8 +5805,30 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (type === MSG.IMAGE_META) {
     const url = (message.url || "").trim();
+    if (message.buffer instanceof ArrayBuffer) {
+      const bytes = new Uint8Array(message.buffer);
+      if (bytes.byteLength > 8 * 1024 * 1024) {
+        sendResponse({ ok: false, error: "Image too large for in-extension meta peek" });
+        return true;
+      }
+      Promise.resolve(
+        analyzeImageMetaFromBytes(bytes, {
+          filename: message.filename || "image",
+          contentType: message.contentType || "",
+          local: true,
+        })
+      )
+        .then((result) => sendResponse(result))
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: (err && err.message) || "Meta analysis failed",
+          })
+        );
+      return true;
+    }
     if (!url) {
-      sendResponse({ ok: false, error: "No image URL" });
+      sendResponse({ ok: false, error: "No image URL or buffer" });
       return true;
     }
     analyzeImageMeta(url)
@@ -4776,8 +5844,26 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (type === MSG.STEGSTRUCK_SCAN) {
     const url = (message.url || "").trim();
+    if (message.buffer instanceof ArrayBuffer) {
+      sendImageToStegStruck("", {
+        bytes: message.buffer,
+        filename: message.filename || "image.jpg",
+        contentType: message.contentType || "application/octet-stream",
+        tier: message.tier || "quick",
+        passphrase: message.passphrase || "",
+        llm: Boolean(message.llm),
+      })
+        .then((result) => sendResponse(result))
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: (err && err.message) || "StegStruck scan failed",
+          })
+        );
+      return true;
+    }
     if (!url) {
-      sendResponse({ ok: false, error: "No image URL" });
+      sendResponse({ ok: false, error: "No image URL or buffer" });
       return true;
     }
     sendImageToStegStruck(url, {
@@ -4790,6 +5876,20 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({
           ok: false,
           error: (err && err.message) || "StegStruck scan failed",
+        })
+      );
+    return true;
+  }
+
+  if (type === MSG.HUNT_CLI_DECODE) {
+    sendCipherToHuntCli(message.text || "", {
+      tool: message.tool || "auto",
+    })
+      .then((result) => sendResponse(result))
+      .catch((err) =>
+        sendResponse({
+          ok: false,
+          error: (err && err.message) || "hunt-cli decode failed",
         })
       );
     return true;
@@ -4852,6 +5952,47 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     return;
+  }
+
+  if (type === MSG.IMAGE_ASSET && message.imageAsset) {
+    const fromExtensionPage = !sender.tab;
+    if (fromExtensionPage) {
+      storeSet(STORE.IMAGE, message.imageAsset)
+        .then(() => sendResponse({ ok: true }))
+        .catch(() => sendResponse({ ok: false }));
+      return true;
+    }
+    return;
+  }
+
+  if (type === MSG.DCODE_OPEN) {
+    openDcodeWithAutofill(message.url || "", message.text || "")
+      .then((result) => sendResponse(result))
+      .catch((err) =>
+        sendResponse({
+          ok: false,
+          error: (err && err.message) || "dCode open failed",
+        })
+      );
+    return true;
+  }
+
+  if (type === MSG.FORENSICALLY_LOAD) {
+    openForensicallyWithImage({
+      url: message.url || "",
+      buffer: message.buffer,
+      filename: message.filename || "hunt-image.jpg",
+      contentType: message.contentType || "image/jpeg",
+      tool: message.tool || "error-level-analysis",
+    })
+      .then((result) => sendResponse(result))
+      .catch((err) =>
+        sendResponse({
+          ok: false,
+          error: (err && err.message) || "Forensically open failed",
+        })
+      );
+    return true;
   }
 
   if (type === MSG.OPEN_URL) {
@@ -4952,6 +6093,11 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (type === MSG.CANCEL_PROBE) {
+    cancelBacklinkProbe().then((res) => sendResponse(res));
+    return true;
+  }
+
   if (type === MSG.FETCH_SITE_DISCOVERY) {
     resolveTabId(message, sender).then(async (tabId) => {
       let pageUrl = message.pageUrl || "";
@@ -5001,10 +6147,12 @@ async function ingestLiveAssets(tabId, sender, message) {
     revealedHidden: message.revealedHidden || [],
     backlinks: message.backlinks || [],
     mediaUrls: message.mediaUrls || [],
+    mediaAlt: message.mediaAlt || [],
     candidates: message.candidates || [],
   };
   assetsByTab[tabId] = existing;
   await storeSet(STORE.ASSETS, assetsByTab);
+  probeCommentsFromAssets(tabId, pageUrl, message).catch(() => {});
 }
 
 async function resolveTabId(message, sender) {

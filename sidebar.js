@@ -15,6 +15,7 @@ const MSG = {
   STATE: "STATE",
   CIPHER_INPUT: "CIPHER_INPUT",
   PROBE_BACKLINK: "PROBE_BACKLINK",
+  CANCEL_PROBE: "CANCEL_PROBE",
   PROBE_PROGRESS: "PROBE_PROGRESS",
   PROBE_RESULT: "PROBE_RESULT",
   PIN_HUNT_BASE: "PIN_HUNT_BASE",
@@ -27,6 +28,9 @@ const MSG = {
   IMAGE_EXTRACT_PART: "IMAGE_EXTRACT_PART",
   IMAGE_META: "IMAGE_META",
   STEGSTRUCK_SCAN: "STEGSTRUCK_SCAN",
+  HUNT_CLI_DECODE: "HUNT_CLI_DECODE",
+  DCODE_OPEN: "DCODE_OPEN",
+  FORENSICALLY_LOAD: "FORENSICALLY_LOAD",
   AUDIO_ASSET: "AUDIO_ASSET",
   AUDIO_ANALYZE: "AUDIO_ANALYZE",
   AUDIO_CAPTURE: "AUDIO_CAPTURE",
@@ -37,12 +41,22 @@ const MSG = {
   GEOHASH_INPUT: "GEOHASH_INPUT",
   ARCHIVE_INFO: "ARCHIVE_INFO",
   CLEAR_PENDING_INGEST: "CLEAR_PENDING_INGEST",
+  AUTO_PROBE_SELECTION: "AUTO_PROBE_SELECTION",
+  HUNT_PROBE_HIT: "HUNT_PROBE_HIT",
+  HUNT_PROBE_START: "HUNT_PROBE_START",
+  HUNT_PROBE_MISS: "HUNT_PROBE_MISS",
+  FETCH_PASTE: "FETCH_PASTE",
+  FETCH_PAGE_SOURCE: "FETCH_PAGE_SOURCE",
+  FETCH_VIDEO_META: "FETCH_VIDEO_META",
+  ID_ROUTER_INPUT: "ID_ROUTER_INPUT",
+  PASTE_OPEN: "PASTE_OPEN",
 };
 
 const PANEL_ORDER_KEY = "sidebarPanelOrder";
 const PANEL_OPEN_KEY = "sidebarPanelOpen";
 const NOTES_KEY = "sidebarNotes";
 const AUTO_INGEST_KEY = "autoIngestDownloads";
+const AUTO_PROBE_HUNT_KEY = "autoProbeHuntSite";
 const GROUP_ORDER_KEY = "groupOrder";
 const GROUP_OPEN_KEY = "groupOpenState";
 const CIPHER_AUTO_DECODE_KEY = "cipherAutoDecode";
@@ -51,10 +65,10 @@ const CIPHER_ROT_N_KEY = "cipherRotN";
 /** Top-level accordion groups (drag-reorder these). */
 const DEFAULT_GROUP_ORDER = ["group-hunt", "group-page", "group-media", "group-decode"];
 const GROUP_CHILDREN = {
-  "group-hunt": ["panel-probe"],
+  "group-hunt": ["panel-probe", "panel-id-router", "panel-paste"],
   "group-page": ["panel-assets", "panel-redirects"],
-  "group-media": ["panel-image", "panel-audio", "panel-archive"],
-  "group-decode": ["panel-cipher", "panel-notes", "panel-geohash", "panel-dns"],
+  "group-media": ["panel-image", "panel-audio", "panel-video", "panel-archive"],
+  "group-decode": ["panel-cipher", "panel-notes", "panel-checklist", "panel-cryptic-guide", "panel-geohash", "panel-dns"],
 };
 const PANEL_TO_GROUP = (() => {
   /** @type {Record<string, string>} */
@@ -68,13 +82,18 @@ const PANEL_TO_GROUP = (() => {
 /** Nested tool panels (open state still persisted). */
 const DEFAULT_PANEL_ORDER = [
   "panel-probe",
+  "panel-id-router",
+  "panel-paste",
   "panel-assets",
   "panel-redirects",
   "panel-image",
   "panel-audio",
+  "panel-video",
   "panel-archive",
   "panel-cipher",
   "panel-notes",
+  "panel-checklist",
+  "panel-cryptic-guide",
   "panel-geohash",
   "panel-dns",
 ];
@@ -88,13 +107,18 @@ const DEFAULT_GROUP_OPEN = {
 };
 const DEFAULT_PANEL_OPEN = {
   "panel-probe": true,
+  "panel-id-router": false,
+  "panel-paste": false,
   "panel-assets": true,
   "panel-redirects": false,
   "panel-image": true,
   "panel-audio": true,
+  "panel-video": false,
   "panel-archive": true,
   "panel-cipher": true,
   "panel-notes": false,
+  "panel-checklist": false,
+  "panel-cryptic-guide": false,
   "panel-geohash": false,
   "panel-dns": false,
 };
@@ -177,9 +201,11 @@ const els = {
   probeFilteredBody: document.getElementById("probe-filtered-body"),
   countFiltered: document.getElementById("count-filtered"),
   btnPinHunt: document.getElementById("btn-pin-hunt"),
-  btnClearHunt: document.getElementById("btn-clear-hunt"),
+  btnClearProbe: document.getElementById("btn-clear-probe"),
+  btnUnpinHunt: document.getElementById("btn-unpin-hunt"),
   huntBaseLabel: document.getElementById("hunt-base-label"),
   autoIngestDownloads: document.getElementById("auto-ingest-downloads"),
+  autoProbeHunt: document.getElementById("auto-probe-hunt"),
   ingestToast: document.getElementById("ingest-toast"),
   panelStack: document.getElementById("panel-stack"),
   listCandidates: document.getElementById("list-candidates"),
@@ -187,20 +213,39 @@ const els = {
   modeId: document.getElementById("mode-id"),
   modeUsername: document.getElementById("mode-username"),
   badgeImage: document.getElementById("badge-image"),
+  imageDrop: document.getElementById("image-drop"),
+  imageFile: document.getElementById("image-file"),
   imageEmpty: document.getElementById("image-empty"),
   imageCard: document.getElementById("image-card"),
   imageUrl: document.getElementById("image-url"),
+  imagePreview: document.getElementById("image-preview"),
   btnImageOpen: document.getElementById("btn-image-open"),
   btnImageCopy: document.getElementById("btn-image-copy"),
   btnImageLens: document.getElementById("btn-image-lens"),
   btnImageYandex: document.getElementById("btn-image-yandex"),
   btnImageTineye: document.getElementById("btn-image-tineye"),
   btnImageForensics: document.getElementById("btn-image-forensics"),
+  btnImageForensicsExternal: document.getElementById("btn-image-forensics-external"),
   btnImageStegstruck: document.getElementById("btn-image-stegstruck"),
   btnImageProbe: document.getElementById("btn-image-probe"),
   btnImageHex: document.getElementById("btn-image-hex"),
   btnImageSplit: document.getElementById("btn-image-split"),
   btnImageMeta: document.getElementById("btn-image-meta"),
+  btnImageEla: document.getElementById("btn-image-ela"),
+  btnImageLsb: document.getElementById("btn-image-lsb"),
+  btnImageChannels: document.getElementById("btn-image-channels"),
+  imageLocalPanel: document.getElementById("image-local-panel"),
+  imageLocalStatus: document.getElementById("image-local-status"),
+  imageElaWrap: document.getElementById("image-local-ela-wrap"),
+  imageElaControls: document.getElementById("image-ela-controls"),
+  imageElaQuality: document.getElementById("image-ela-quality"),
+  imageElaQualityVal: document.getElementById("image-ela-quality-val"),
+  imageElaScale: document.getElementById("image-ela-scale"),
+  imageElaScaleVal: document.getElementById("image-ela-scale-val"),
+  btnImageForensically: document.getElementById("btn-image-forensically"),
+  imageElaCanvas: document.getElementById("image-ela-canvas"),
+  imageLsbWrap: document.getElementById("image-local-lsb-wrap"),
+  imageChannelsWrap: document.getElementById("image-local-channels-wrap"),
   imageForensicsStatus: document.getElementById("image-forensics-status"),
   imageForensicsFallback: document.getElementById("image-forensics-fallback"),
   btnImageCopyFallback: document.getElementById("btn-image-copy-fallback"),
@@ -268,6 +313,17 @@ const els = {
   btnAudioSpectrum: document.getElementById("btn-audio-spectrum"),
   btnAudioMorse: document.getElementById("btn-audio-morse"),
   btnAudioSstv: document.getElementById("btn-audio-sstv"),
+  audioSstvWrap: document.getElementById("audio-sstv-wrap"),
+  audioSstvCanvas: document.getElementById("audio-sstv-canvas"),
+  btnAudioSpectrogram: document.getElementById("btn-audio-spectrogram"),
+  btnAudioMorseLocal: document.getElementById("btn-audio-morse-local"),
+  audioLocalPanel: document.getElementById("audio-local-panel"),
+  audioLocalStatus: document.getElementById("audio-local-status"),
+  audioSpectrogramWrap: document.getElementById("audio-spectrogram-wrap"),
+  audioSpectrogramCanvas: document.getElementById("audio-spectrogram-canvas"),
+  audioMorseLocalWrap: document.getElementById("audio-morse-local-wrap"),
+  audioMorseLocalText: document.getElementById("audio-morse-local-text"),
+  audioMorseLocalRaw: document.getElementById("audio-morse-local-raw"),
   audioAnalyzePanel: document.getElementById("audio-analyze-panel"),
   audioId3Status: document.getElementById("audio-id3-status"),
   audioId3List: document.getElementById("audio-id3-list"),
@@ -289,15 +345,57 @@ const els = {
   btnArchiveCipher: document.getElementById("btn-archive-cipher"),
   btnArchiveNotes: document.getElementById("btn-archive-notes"),
   btnArchiveProbe: document.getElementById("btn-archive-probe"),
+  idRouterInput: document.getElementById("id-router-input"),
+  btnIdRouter: document.getElementById("btn-id-router"),
+  idRouterStatus: document.getElementById("id-router-status"),
+  idRouterResults: document.getElementById("id-router-results"),
+  pasteInput: document.getElementById("paste-input"),
+  btnPasteFetch: document.getElementById("btn-paste-fetch"),
+  pasteStatus: document.getElementById("paste-status"),
+  pasteWarning: document.getElementById("paste-warning"),
+  pasteTags: document.getElementById("paste-tags"),
+  pasteBody: document.getElementById("paste-body"),
+  btnScanSource: document.getElementById("btn-scan-source"),
+  listSourceComments: document.getElementById("list-source-comments"),
+  listSourceHidden: document.getElementById("list-source-hidden"),
+  listSourceMeta: document.getElementById("list-source-meta"),
+  countSourceComments: document.getElementById("count-source-comments"),
+  countSourceHidden: document.getElementById("count-source-hidden"),
+  countSourceMeta: document.getElementById("count-source-meta"),
+  listMediaAlt: document.getElementById("list-media-alt"),
+  countMediaAlt: document.getElementById("count-media-alt"),
+  videoInput: document.getElementById("video-input"),
+  btnVideoMeta: document.getElementById("btn-video-meta"),
+  videoStatus: document.getElementById("video-status"),
+  videoMetaCard: document.getElementById("video-meta-card"),
+  commentWorkspace: document.getElementById("comment-workspace"),
+  commentWorkspaceChips: document.getElementById("comment-workspace-chips"),
+  checklistItems: document.getElementById("checklist-items"),
+  btnCipherQuipqiup: document.getElementById("btn-cipher-quipqiup"),
+  btnCipherDcode: document.getElementById("btn-cipher-dcode"),
+  btnCipherCli: document.getElementById("btn-cipher-cli"),
+  cipherCliStatus: document.getElementById("cipher-cli-status"),
+  btnCipherCyberchef: document.getElementById("btn-cipher-cyberchef"),
 };
 
 let revealEnabled = false;
+/** @type {Set<string>} */
+let confirmedHuntHits = new Set();
+/** @type {object|null} */
+let lastSourceScan = null;
+let hasHuntBasePinned = false;
 let cipherTimer = 0;
 let notesTimer = 0;
 let probeMode = "id";
 /** Last known active-tab URL from STATE (sidebar passes this into probes). */
 let lastKnownPageUrl = "";
 let currentImage = null;
+let imagePreviewObjectUrl = null;
+let imagePreviewSourceKey = null;
+let imageLocalBuffer = null;
+let imageLocalFilename = "";
+let lastAudioSpectrogramKey = "";
+let lastImageElaKey = "";
 let currentAudio = null;
 let audioPreviewObjectUrl = null;
 /** Key for the active preview: http(s) URL or `local:<filename>`. */
@@ -305,6 +403,9 @@ let audioPreviewSourceKey = null;
 /** Local drop bytes kept for re-analyze / blob preview (not persisted). */
 let audioLocalBuffer = null;
 let audioLocalFilename = "";
+/** Strings/ID3 via background (~16 MB). Local spectrogram/Morse can use up to ~32 MB. */
+const AUDIO_STRINGS_MAX_BYTES = 16 * 1024 * 1024;
+const AUDIO_LOCAL_MAX_BYTES = 32 * 1024 * 1024;
 /** @type {null | {
  *   filename: string,
  *   comment: string,
@@ -450,6 +551,7 @@ function renderAssets(assets) {
   const revealedHidden = assets.revealedHidden || [];
   const backlinks = assets.backlinks || [];
   const mediaUrls = assets.mediaUrls || [];
+  const mediaAlt = assets.mediaAlt || [];
   const candidates = assets.candidates || [];
 
   fillList(els.listBacklinks, backlinks, (item) => {
@@ -495,6 +597,13 @@ function renderAssets(assets) {
         meta.insertBefore(open, meta.lastChild);
       }
       if (meta && url) {
+        if (item.kind === "video") {
+          meta.appendChild(
+            handoffButton("Video", () => {
+              focusVideoPanel(url);
+            })
+          );
+        }
         meta.appendChild(
           handoffButton("Audio", () => {
             browser.runtime
@@ -513,30 +622,23 @@ function renderAssets(assets) {
   }
 
   fillList(els.listCandidates, candidates, (item) => {
-    const li = document.createElement("li");
-    li.className = "asset-item";
-    const body = document.createElement("div");
-    body.className = "preview";
-    body.textContent = item.text || item.id || "";
-    li.appendChild(body);
-    const meta = document.createElement("div");
-    meta.className = "meta-line";
-    const hint = document.createElement("span");
-    hint.textContent = item.hint || "token";
-    meta.appendChild(hint);
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "cand-btn";
-    btn.textContent = "Probe";
-    btn.addEventListener("click", () => {
-      setProbeMode("id");
-      els.probeInput.value = item.text || item.id || "";
-      startProbe();
+    const text = item.text || item.id || "";
+    const card = assetCard(text, item.frame, text, item.hint || "token", {
+      handoff: true,
+      source: "candidate",
     });
-    meta.appendChild(btn);
-    li.appendChild(meta);
-    return li;
+    return card;
   });
+
+  if (els.listMediaAlt) {
+    fillList(els.listMediaAlt, mediaAlt, (item) =>
+      assetCard(item.preview || item.text, item.frame, item.text, item.source || "", {
+        handoff: true,
+        source: "media_alt",
+      })
+    );
+    if (els.countMediaAlt) setCount(els.countMediaAlt, mediaAlt.length);
+  }
 
   fillList(els.listRevealed, revealedHidden, (item) =>
     assetCard(item.preview || item.text, item.frame, item.text, item.reason ? "why: " + item.reason : "", {
@@ -547,6 +649,7 @@ function renderAssets(assets) {
     assetCard(item.preview || item.text, item.frame, item.text, "", {
       handoff: true,
       decodePreview: true,
+      source: "comment",
     })
   );
   fillList(els.listBase64, base64, (item) =>
@@ -586,6 +689,8 @@ function renderAssets(assets) {
   setCount(els.countFlags, flags.length);
   setCount(els.countMeta, meta.length);
 
+  renderSourceScan(lastSourceScan);
+
   const headerCount =
     (els.countHeaders && Number(els.countHeaders.textContent)) || 0;
   const robotsCount =
@@ -601,6 +706,7 @@ function renderAssets(assets) {
     revealedHidden.length +
     backlinks.length +
     mediaUrls.length +
+    mediaAlt.length +
     headerCount +
     robotsCount +
     sitemapCount;
@@ -875,6 +981,112 @@ function fillList(ul, items, render) {
   }
 }
 
+const AC = typeof ArtifactClassifier !== "undefined" ? ArtifactClassifier : null;
+const IR = typeof IdRouterPatterns !== "undefined" ? IdRouterPatterns : null;
+
+function classifyText(text, context) {
+  const ctx = Object.assign({}, context || {});
+  const raw = String(text || "").trim();
+  if (IR && raw) ctx.idMatches = IR.matchIdPatternsBest(raw);
+  if (AC) return AC.classifyArtifact(raw, ctx);
+  return [];
+}
+
+function runArtifactAction(action, text, tag) {
+  const t = String(text || "").trim();
+  switch (action) {
+    case "cipher":
+      sendTextToCipher(t);
+      break;
+    case "notes":
+      if (!els.notesInput) break;
+      {
+        const cur = els.notesInput.value || "";
+        els.notesInput.value = cur ? cur + "\n" + t : t;
+        persistNotesSoon();
+        focusNotesPanel();
+      }
+      break;
+    case "probe":
+      setProbeMode("id");
+      if (els.probeInput) els.probeInput.value = t.slice(0, 200);
+      focusProbePanel();
+      startProbe();
+      break;
+    case "probe_hunt":
+      browser.runtime
+        .sendMessage({ type: MSG.AUTO_PROBE_SELECTION, text: t, pageUrl: lastKnownPageUrl })
+        .catch(() => {});
+      break;
+    case "dns":
+      focusDnsPanel();
+      if (els.dnsInput) {
+        const dom = AC && AC.isPasteHost ? null : t.match(/([a-z0-9.-]+\.[a-z]{2,})/i);
+        els.dnsInput.value = dom ? dom[1] : t;
+        runDnsLookup();
+      }
+      break;
+    case "geohash":
+      focusGeohashPanel();
+      if (els.geohashInput) {
+        els.geohashInput.value = t;
+        resolveGeohashInput();
+      }
+      break;
+    case "paste":
+      openPastePanel(t);
+      break;
+    case "id_router":
+      focusIdRouterPanel(t);
+      break;
+    case "video":
+      focusVideoPanel(t);
+      break;
+    case "archive":
+      openArchiveHelper(t);
+      break;
+    case "source_scan":
+      scanPageSource();
+      break;
+    case "dcode":
+      sendTextToCipher(t);
+      openDcodeTool(t);
+      break;
+    case "zw_decode":
+      if (AC && AC.stripZeroWidth) sendTextToCipher(AC.stripZeroWidth(t));
+      else sendTextToCipher(t.replace(/[\u200B-\u200D\uFEFF]/g, ""));
+      break;
+    default:
+      break;
+  }
+}
+
+function renderArtifactChips(li, text, context) {
+  const tags = classifyText(text, context);
+  if (!tags.length) return;
+  const row = document.createElement("div");
+  row.className = "artifact-chip-row";
+  for (const tag of tags) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className =
+      "artifact-chip" +
+      (tag.confidence === "maybe" ? " is-maybe" : "") +
+      (tag.type === "confirmed_hunt_hit" ? " is-hit" : "");
+    chip.textContent =
+      tag.label + (tag.confidence === "maybe" ? " ?" : tag.confidence === "sure" ? "" : "");
+    chip.title = (tag.actions || []).join(", ");
+    chip.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const act = tag.actions && tag.actions[0];
+      if (act) runArtifactAction(act, text, tag);
+    });
+    row.appendChild(chip);
+  }
+  li.appendChild(row);
+}
+
 function assetCard(preview, frame, fullText, extra, options) {
   const opts = options || {};
   const text = fullText || preview || "";
@@ -904,6 +1116,13 @@ function assetCard(preview, frame, fullText, extra, options) {
       li.appendChild(chip);
     }
   }
+
+  const assetContext = {
+    source: opts.source || "asset",
+    hasHuntBase: hasHuntBasePinned,
+    confirmedHit: confirmedHuntHits.has(text.trim().toLowerCase()),
+  };
+  renderArtifactChips(li, text, assetContext);
 
   const meta = document.createElement("div");
   meta.className = "meta-line";
@@ -1268,7 +1487,10 @@ function renderCiphers(raw) {
       chip.className = "cipher-guess";
       chip.textContent = g.label;
       chip.title = g.reason || g.label;
-      chip.addEventListener("click", () => focusCipherCard(g.id));
+      chip.addEventListener("click", () => {
+        if (g.id === "dcode") openDcodeTool(input);
+        else focusCipherCard(g.id);
+      });
       els.cipherGuesses.appendChild(chip);
     }
   }
@@ -1372,6 +1594,10 @@ function guessCipherKinds(raw) {
   // Morse
   if (/^[.\-\s_–—/−•·‧∙/|]+$/.test(input) && /[.\-]/.test(input)) {
     push("morse", "Morse", "dot/dash alphabet");
+  }
+
+  if (AC && AC.looksLikeHodor && AC.looksLikeHodor(input)) {
+    push("dcode", "dCode", "niche cipher — use dCode Hodor Language");
   }
 
   // Binary
@@ -2155,6 +2381,13 @@ function decodeMorse(input) {
   return { ok: true, text };
 }
 
+function stripHtmlForCipher(text) {
+  return String(text || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function looksLikeMorse(text) {
   const t = String(text || "").trim();
   if (t.length < 4) return false;
@@ -2410,6 +2643,7 @@ function decodeCaesarCrib(input) {
 function renderHuntBase(huntBase) {
   const hb = huntBase && huntBase.host ? huntBase : null;
   const pinned = Boolean(hb);
+  hasHuntBasePinned = pinned;
   const pathCount = pinned
     ? Array.isArray(hb.paths) && hb.paths.length
       ? hb.paths.length
@@ -2423,6 +2657,7 @@ function renderHuntBase(huntBase) {
       : "Pin active tab as hunt base (stores origin + path)";
   }
   if (!els.huntBaseLabel) return;
+  if (els.btnUnpinHunt) els.btnUnpinHunt.hidden = !pinned;
   if (pinned) {
     const bases = (Array.isArray(hb.paths) ? hb.paths : [""]).map((p) =>
       p ? hb.host + p : hb.host
@@ -2828,22 +3063,47 @@ let lastConsumedPendingAt = 0;
 let lastIngestToastText = "";
 let lastIngestToastAt = 0;
 
-function showIngestToast(text) {
+function showIngestToast(text, options) {
   if (!els.ingestToast) return;
   const msg = String(text || "").trim();
   if (!msg) return;
   const now = Date.now();
-  if (msg === lastIngestToastText && now - lastIngestToastAt < 2500) return;
-  lastIngestToastText = msg;
+  const mode = (options && options.mode) || (options && options.hit ? "hit" : "default");
+  const dedupeKey = mode + "|" + msg;
+  if (dedupeKey === lastIngestToastText && now - lastIngestToastAt < 2500) return;
+  lastIngestToastText = dedupeKey;
   lastIngestToastAt = now;
   els.ingestToast.hidden = false;
   els.ingestToast.textContent = msg;
+  els.ingestToast.classList.remove("is-hit", "is-probing", "is-miss");
+  if (mode === "hit") {
+    els.ingestToast.classList.add("is-hit");
+  } else if (mode === "probing") {
+    els.ingestToast.classList.add("is-probing");
+  } else if (mode === "miss") {
+    els.ingestToast.classList.add("is-miss");
+  }
   clearTimeout(ingestToastTimer);
+  const duration =
+    mode === "hit" ? 6500 : mode === "probing" ? 3500 : mode === "miss" ? 5000 : 4500;
   ingestToastTimer = setTimeout(() => {
     if (!els.ingestToast) return;
     els.ingestToast.hidden = true;
     els.ingestToast.textContent = "";
-  }, 4500);
+    els.ingestToast.classList.remove("is-hit", "is-probing", "is-miss");
+  }, duration);
+}
+
+function flashHuntHitBadge() {
+  if (!els.badgeProbe) return;
+  const prev = els.badgeProbe.textContent;
+  els.badgeProbe.textContent = "!";
+  els.badgeProbe.classList.add("is-hit");
+  setTimeout(() => {
+    if (!els.badgeProbe) return;
+    els.badgeProbe.classList.remove("is-hit");
+    if (els.badgeProbe.textContent === "!") els.badgeProbe.textContent = prev || "0";
+  }, 4000);
 }
 
 function clearPendingIngest(which) {
@@ -2878,10 +3138,28 @@ async function loadAutoIngestToggle() {
   }
 }
 
+async function loadAutoProbeHuntToggle() {
+  if (!els.autoProbeHunt) return;
+  try {
+    const bag = await browser.storage.local.get(AUTO_PROBE_HUNT_KEY);
+    els.autoProbeHunt.checked = bag[AUTO_PROBE_HUNT_KEY] !== false;
+  } catch (_err) {
+    els.autoProbeHunt.checked = true;
+  }
+}
+
 if (els.autoIngestDownloads) {
   els.autoIngestDownloads.addEventListener("change", () => {
     browser.storage.local
       .set({ [AUTO_INGEST_KEY]: Boolean(els.autoIngestDownloads.checked) })
+      .catch(() => {});
+  });
+}
+
+if (els.autoProbeHunt) {
+  els.autoProbeHunt.addEventListener("change", () => {
+    browser.storage.local
+      .set({ [AUTO_PROBE_HUNT_KEY]: Boolean(els.autoProbeHunt.checked) })
       .catch(() => {});
   });
 }
@@ -2907,7 +3185,6 @@ function audioDeepToolUrls() {
     audacity: "https://wiki.audacityteam.org/wiki/Spectrogram_view",
     spectrum: "https://academo.org/demos/spectrum-analyzer/",
     morse: "https://www.dcode.fr/morse-code",
-    sstv: "https://www.k0pir.us/sstv/",
   };
 }
 
@@ -2922,6 +3199,21 @@ function clearAudioAnalyzePanel() {
   if (els.audioStrings) els.audioStrings.replaceChildren();
   if (els.audioMorsePanel) els.audioMorsePanel.hidden = true;
   if (els.audioMorseList) els.audioMorseList.replaceChildren();
+}
+
+function clearAudioLocalPanel() {
+  if (els.audioLocalPanel) els.audioLocalPanel.hidden = true;
+  setAudioLocalStatus("");
+  if (els.audioSpectrogramWrap) els.audioSpectrogramWrap.hidden = true;
+  if (els.audioMorseLocalWrap) els.audioMorseLocalWrap.hidden = true;
+  if (els.audioMorseLocalText) {
+    els.audioMorseLocalText.textContent = "";
+    els.audioMorseLocalText.onclick = null;
+    els.audioMorseLocalText.style.cursor = "";
+    els.audioMorseLocalText.title = "";
+  }
+  if (els.audioMorseLocalRaw) els.audioMorseLocalRaw.textContent = "";
+  if (els.audioSstvWrap) els.audioSstvWrap.hidden = true;
 }
 
 function mimeFromAudioFilename(name) {
@@ -3111,6 +3403,131 @@ async function persistAudioAsset(asset) {
   }
 }
 
+async function persistImageAsset(asset) {
+  if (!asset) return;
+  try {
+    await browser.runtime.sendMessage({ type: MSG.IMAGE_ASSET, imageAsset: asset });
+  } catch (_err) {
+    /* ignore */
+  }
+}
+
+function mimeFromImageFilename(name) {
+  const n = String(name || "").toLowerCase();
+  if (n.endsWith(".png")) return "image/png";
+  if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+  if (n.endsWith(".gif")) return "image/gif";
+  if (n.endsWith(".webp")) return "image/webp";
+  if (n.endsWith(".bmp")) return "image/bmp";
+  if (n.endsWith(".svg")) return "image/svg+xml";
+  if (n.endsWith(".avif")) return "image/avif";
+  if (n.endsWith(".ico")) return "image/x-icon";
+  return "image/jpeg";
+}
+
+function imagePreviewKeyForAsset(asset) {
+  if (!asset) return "";
+  if (asset.url && /^https?:\/\//i.test(asset.url)) return asset.url;
+  if (asset.filename) return "local:" + asset.filename;
+  return "";
+}
+
+function revokeImagePreviewUrl() {
+  if (!imagePreviewObjectUrl) return;
+  try {
+    URL.revokeObjectURL(imagePreviewObjectUrl);
+  } catch (_err) {
+    /* ignore */
+  }
+  imagePreviewObjectUrl = null;
+  imagePreviewSourceKey = null;
+}
+
+function clearImageLocalBytes() {
+  imageLocalBuffer = null;
+  imageLocalFilename = "";
+}
+
+function hasSidebarLocalImage() {
+  return Boolean(imageLocalBuffer && imageLocalBuffer.byteLength);
+}
+
+function updateImagePreview(src) {
+  if (!els.imagePreview) return;
+  if (src) {
+    els.imagePreview.src = src;
+    els.imagePreview.hidden = false;
+  } else {
+    els.imagePreview.removeAttribute("src");
+    els.imagePreview.hidden = true;
+  }
+}
+
+function setImagePreviewFromBlob(blob, key) {
+  revokeImagePreviewUrl();
+  imagePreviewObjectUrl = URL.createObjectURL(blob);
+  imagePreviewSourceKey = key || "";
+  updateImagePreview(imagePreviewObjectUrl);
+}
+
+function imageAnalyzePayload() {
+  if (currentImage && currentImage.url && /^https?:\/\//i.test(currentImage.url)) {
+    return { url: currentImage.url };
+  }
+  if (hasSidebarLocalImage()) {
+    return {
+      buffer: imageLocalBuffer.buffer.slice(
+        imageLocalBuffer.byteOffset,
+        imageLocalBuffer.byteOffset + imageLocalBuffer.byteLength
+      ),
+      filename: imageLocalFilename || currentImage?.filename || "image",
+      contentType: mimeFromImageFilename(imageLocalFilename || currentImage?.filename),
+    };
+  }
+  return null;
+}
+
+function publicImageUrl() {
+  if (currentImage && currentImage.url && /^https?:\/\//i.test(currentImage.url)) {
+    return currentImage.url;
+  }
+  return "";
+}
+
+async function analyzeImageLocally(file) {
+  if (!file) return;
+  if (
+    file.type &&
+    !/^image\//i.test(file.type) &&
+    !/\.(png|jpe?g|gif|webp|bmp|svg|avif|ico)$/i.test(file.name || "")
+  ) {
+    setImageForensicsStatus("Not an image file — choose PNG / JPG / GIF / WEBP");
+    return;
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    setImageForensicsStatus("Image too large (>8 MB)");
+    return;
+  }
+  const buf = await file.arrayBuffer();
+  const owned = new Uint8Array(buf);
+  const name = file.name || "image.jpg";
+  const mime = file.type && /^image\//i.test(file.type) ? file.type : mimeFromImageFilename(name);
+  const blob = new Blob([owned], { type: mime });
+  const previewUrl = URL.createObjectURL(blob);
+  const asset = {
+    url: "",
+    filename: name,
+    local: true,
+    capturedAt: Date.now(),
+  };
+  imageLocalBuffer = owned;
+  imageLocalFilename = name;
+  renderImageAsset(asset, { focus: true, previewUrl, keepStatus: true });
+  await persistImageAsset(asset);
+  setImageForensicsStatus("Local file loaded — ELA / Hex / Meta ready");
+  runImageHex(null);
+}
+
 function renderAudioAsset(audioAsset, options) {
   const shouldFocus = !options || options.focus !== false;
   const opts = options || {};
@@ -3126,6 +3543,7 @@ function renderAudioAsset(audioAsset, options) {
       els.audioUrl.title = "";
     }
     clearAudioAnalyzePanel();
+    clearAudioLocalPanel();
     clearAudioLocalBytes();
     updateAudioPreview("");
     setAudioStatus("");
@@ -3192,6 +3610,18 @@ function renderAudioAsset(audioAsset, options) {
     // Keep Strings/ID3 status line across pushState re-syncs.
     if (!(els.audioAnalyzePanel && !els.audioAnalyzePanel.hidden)) {
       setAudioStatus("");
+    }
+  }
+
+  const spectroKey = audioPreviewKeyForAsset(currentAudio);
+  if (
+    spectroKey &&
+    spectroKey !== lastAudioSpectrogramKey &&
+    (/^https?:\/\//i.test(currentAudio.url || "") || hasSidebarLocalAudio())
+  ) {
+    lastAudioSpectrogramKey = spectroKey;
+    if (opts.autoSpectrogram !== false) {
+      scheduleAutoSpectrogram();
     }
   }
 }
@@ -3360,7 +3790,14 @@ async function runAudioAnalyze(urlOrBuffer, filename) {
       });
     }
     if (!result || !result.ok) {
-      setAudioStatus((result && result.error) || "Audio analysis failed.");
+      const err = (result && result.error) || "Audio analysis failed.";
+      if (/too large/i.test(err)) {
+        setAudioStatus(
+          err + " — Spectrogram / Morse decode may still work (local tools row)"
+        );
+      } else {
+        setAudioStatus(err);
+      }
       if (els.audioAnalyzePanel) els.audioAnalyzePanel.hidden = false;
       return;
     }
@@ -3386,13 +3823,15 @@ async function runAudioAnalyze(urlOrBuffer, filename) {
 
 async function analyzeAudioLocally(file) {
   if (!file) return;
-  if (file.size > 8 * 1024 * 1024) {
-    setAudioStatus("Audio too large (>8 MB)");
+  if (file.size > AUDIO_LOCAL_MAX_BYTES) {
+    setAudioStatus(
+      "Audio too large (>" + Math.round(AUDIO_LOCAL_MAX_BYTES / (1024 * 1024)) + " MB) for local tools"
+    );
     return;
   }
   const buf = await file.arrayBuffer();
   // Keep an owned copy in module scope (survives analyze messaging).
-  const owned = buf.slice(0);
+  const owned = new Uint8Array(buf);
   const name = file.name || "audio";
   const mime = resolveAudioMime(file, name);
   const blob = new Blob([owned], { type: mime });
@@ -3409,6 +3848,13 @@ async function analyzeAudioLocally(file) {
   // can race a pushState with an empty STORE.AUDIO.
   renderAudioAsset(asset, { focus: true, previewUrl, keepStatus: true });
   await persistAudioAsset(asset);
+  if (file.size > AUDIO_STRINGS_MAX_BYTES) {
+    setAudioStatus(
+      formatByteSize(file.size) +
+        " — too large for Strings/ID3; use Spectrogram / Morse decode"
+    );
+    return;
+  }
   await runAudioAnalyze(owned, name);
 }
 
@@ -3450,13 +3896,12 @@ function reverseSearchUrls(imageUrl) {
   };
 }
 
-/** Best-effort forensics suite: Forensically (drag-drop) + URL EXIF + FotoForensics. */
+/** URL-based forensics tools (Forensically is piped separately with file upload). */
 function forensicsToolUrls(imageUrl) {
   const q = encodeURIComponent(imageUrl);
   return [
-    "https://29a.ch/photo-forensics/#forensic",
     "https://exif.regex.info/exif.cgi?imgurl=" + q,
-    "https://fotoforensics.com/",
+    "https://fotoforensics.com/?url=" + q,
   ];
 }
 
@@ -3487,32 +3932,80 @@ function setImageForensicsStatus(text, options) {
   }
 }
 
-async function runImageForensics(imageUrl) {
-  if (!imageUrl) return;
-  lastForensicsUrl = imageUrl;
-  const tools = forensicsToolUrls(imageUrl);
-  for (const url of tools) {
-    openUrlInBackground(url);
+async function openForensicallyFromSidebar(tool) {
+  const payload = imageAnalyzePayload();
+  const url = publicImageUrl();
+  if (!payload && !url) {
+    setImageForensicsStatus("Drop an image or use a public URL for Forensically.");
+    return { ok: false };
   }
-  const copied = await copyText(imageUrl);
+  setImageForensicsStatus("Opening Forensically with image…", { showCopyFallback: false });
+  try {
+    const msg = {
+      type: MSG.FORENSICALLY_LOAD,
+      tool: tool || "error-level-analysis",
+    };
+    if (payload && payload.buffer) {
+      msg.buffer = payload.buffer;
+      msg.filename = payload.filename;
+      msg.contentType = payload.contentType;
+    } else if (payload && payload.url) {
+      msg.url = payload.url;
+    } else {
+      msg.url = url;
+    }
+    const result = await browser.runtime.sendMessage(msg);
+    if (!result || !result.ok) {
+      setImageForensicsStatus((result && result.error) || "Forensically load failed");
+      return result || { ok: false };
+    }
+    setImageForensicsStatus("Forensically opened · image loaded");
+    return result;
+  } catch (err) {
+    setImageForensicsStatus((err && err.message) || "Forensically failed");
+    return { ok: false };
+  }
+}
+
+async function runImageForensics(imageUrl) {
+  if (!currentImage && !hasSidebarLocalImage()) {
+    setImageForensicsStatus("Drop or capture an image first.");
+    return;
+  }
+  lastForensicsUrl = imageUrl || publicImageUrl() || "";
+  await openForensicallyFromSidebar("error-level-analysis");
+  if (!lastForensicsUrl) {
+    setImageForensicsStatus("Forensically opened · EXIF/FotoForensics need a public http(s) URL");
+    return;
+  }
+  const tools = forensicsToolUrls(lastForensicsUrl);
+  for (const toolUrl of tools) {
+    openUrlInBackground(toolUrl);
+  }
+  const copied = await copyText(lastForensicsUrl);
   const n = tools.length;
   setImageForensicsStatus(
     copied
-      ? "Opened " + n + " tools · URL copied"
-      : "Opened " + n + " tools · copy failed — use Copy image URL",
+      ? "Forensically + " + n + " URL tools · image URL copied"
+      : "Forensically + " + n + " URL tools · copy failed — use Copy image URL",
     { showCopyFallback: !copied }
   );
 }
 
 async function runStegStruckScan(imageUrl) {
-  if (!imageUrl) return;
+  const payload =
+    imageUrl && /^https?:\/\//i.test(imageUrl) ? { url: imageUrl } : imageAnalyzePayload();
+  if (!payload) {
+    setImageForensicsStatus("Drop or capture an image first.");
+    return;
+  }
   if (els.btnImageStegstruck) els.btnImageStegstruck.disabled = true;
   setImageForensicsStatus("Sending to StegStruck…", { showCopyFallback: false });
   try {
     const result = await browser.runtime.sendMessage({
       type: MSG.STEGSTRUCK_SCAN,
-      url: imageUrl,
       tier: "quick",
+      ...payload,
     });
     if (!result || !result.ok) {
       setImageForensicsStatus(
@@ -3537,6 +4030,7 @@ async function runStegStruckScan(imageUrl) {
 
 function renderImageAsset(imageAsset, options) {
   const shouldFocus = !options || options.focus !== false;
+  const opts = options || {};
   currentImage =
     imageAsset && (imageAsset.url || imageAsset.filename || imageAsset.needsDrop)
       ? imageAsset
@@ -3551,6 +4045,10 @@ function renderImageAsset(imageAsset, options) {
     els.imageUrl.title = "";
     setImageForensicsStatus("");
     clearImageHexPanel();
+    clearImageLocalPanel();
+    clearImageLocalBytes();
+    revokeImagePreviewUrl();
+    updateImagePreview("");
     return;
   }
 
@@ -3558,6 +4056,33 @@ function renderImageAsset(imageAsset, options) {
   els.badgeImage.textContent = "1";
   els.imageEmpty.hidden = true;
   els.imageCard.hidden = false;
+
+  const wantKey = imagePreviewKeyForAsset(currentImage);
+  if (opts.previewUrl && /^blob:/i.test(opts.previewUrl)) {
+    if (imagePreviewObjectUrl && imagePreviewObjectUrl !== opts.previewUrl) {
+      revokeImagePreviewUrl();
+    }
+    imagePreviewObjectUrl = opts.previewUrl;
+    imagePreviewSourceKey = wantKey;
+    updateImagePreview(opts.previewUrl);
+  } else if (wantKey && imagePreviewObjectUrl && imagePreviewSourceKey === wantKey) {
+    updateImagePreview(imagePreviewObjectUrl);
+  } else if (currentImage.url && /^https?:\/\//i.test(currentImage.url)) {
+    if (imageLocalBuffer) clearImageLocalBytes();
+    updateImagePreview(currentImage.url);
+  } else if (imageLocalBuffer && wantKey && wantKey.indexOf("local:") === 0) {
+    const mime = mimeFromImageFilename(currentImage.filename || imageLocalFilename);
+    try {
+      setImagePreviewFromBlob(new Blob([imageLocalBuffer], { type: mime }), wantKey);
+    } catch (_err) {
+      updateImagePreview("");
+    }
+  } else if (hasSidebarLocalImage() && imagePreviewObjectUrl) {
+    updateImagePreview(imagePreviewObjectUrl);
+  } else {
+    updateImagePreview("");
+  }
+
   const label =
     currentImage.url ||
     currentImage.filename ||
@@ -3566,8 +4091,15 @@ function renderImageAsset(imageAsset, options) {
   els.imageUrl.title = currentImage.url || currentImage.filename || "";
   if (currentImage.needsDrop) {
     setImageForensicsStatus(
-      "Download URL not re-fetchable — drop the file or use a public URL for Hex / reverse"
+      "Download URL not re-fetchable — drop the file above or use a public URL for Hex / reverse"
     );
+  } else if (!opts.keepStatus && !currentImage.url && currentImage.filename && !imagePreviewObjectUrl) {
+    setImageForensicsStatus("Re-drop the file to preview and analyze (bytes are session-only).");
+  }
+
+  if (opts.autoEla && currentImage) {
+    lastImageElaKey = imagePreviewKeyForAsset(currentImage);
+    runLocalImageEla();
   }
 }
 
@@ -3756,6 +4288,22 @@ function clearImageHexPanel() {
   if (els.imageHexEditStatus) els.imageHexEditStatus.textContent = "";
 }
 
+function clearImageLocalPanel() {
+  if (els.imageLocalPanel) els.imageLocalPanel.hidden = true;
+  setImageLocalStatus("");
+  if (ImageLocalApi && ImageLocalApi.clearElaCache) ImageLocalApi.clearElaCache();
+  if (els.imageElaControls) els.imageElaControls.hidden = true;
+  if (els.imageElaWrap) els.imageElaWrap.hidden = true;
+  if (els.imageLsbWrap) {
+    els.imageLsbWrap.hidden = true;
+    els.imageLsbWrap.replaceChildren();
+  }
+  if (els.imageChannelsWrap) {
+    els.imageChannelsWrap.hidden = true;
+    els.imageChannelsWrap.replaceChildren();
+  }
+}
+
 function formatByteSize(n) {
   if (n < 1024) return n + " B";
   if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
@@ -3844,13 +4392,22 @@ function describeSplitMarkers(markers) {
 }
 
 async function requestImagePart(url, part) {
-  const result = await browser.runtime.sendMessage({
+  const msg = {
     type: MSG.IMAGE_EXTRACT_PART,
-    url,
     offset: part.offset,
     length: part.size,
     mime: part.mime || "application/octet-stream",
-  });
+  };
+  if (imageSplitSession && imageSplitSession.local && hasSidebarLocalImage()) {
+    msg.buffer = imageLocalBuffer.buffer.slice(
+      imageLocalBuffer.byteOffset,
+      imageLocalBuffer.byteOffset + imageLocalBuffer.byteLength
+    );
+    msg.filename = imageLocalFilename || "image";
+  } else {
+    msg.url = url;
+  }
+  const result = await browser.runtime.sendMessage(msg);
   if (!result || !result.ok || !result.base64) {
     throw new Error((result && result.error) || "Extract failed");
   }
@@ -3992,6 +4549,7 @@ function renderImageSplitResult(result, opts) {
 
   imageSplitSession = {
     url: (result && result.url) || (currentImage && currentImage.url) || "",
+    local: Boolean(result && result.local) || hasSidebarLocalImage(),
     splits,
     markers: result.markers || null,
     concatenated: true,
@@ -4179,6 +4737,7 @@ function renderImageHexResult(result, opts) {
 
   hexEditSession = {
     url: result.url || (currentImage && currentImage.url) || "",
+    local: Boolean(result.local || hasSidebarLocalImage()),
     editOffset: Number(result.editOffset) || 0,
     editHex: result.editHex || "",
     editScope: result.editScope || "full",
@@ -4203,7 +4762,7 @@ function renderImageHexResult(result, opts) {
 }
 
 async function applyHexPatch() {
-  if (!hexEditSession || !hexEditSession.url) {
+  if (!hexEditSession) {
     if (els.imageHexEditStatus) {
       els.imageHexEditStatus.textContent = "Run Hex / strings first.";
     }
@@ -4214,12 +4773,27 @@ async function applyHexPatch() {
   if (els.btnHexApply) els.btnHexApply.disabled = true;
   clearHexPreview();
   try {
-    const result = await browser.runtime.sendMessage({
+    const msg = {
       type: MSG.IMAGE_HEX_PATCH,
-      url: hexEditSession.url,
       editOffset: hexEditSession.editOffset,
       editHex,
-    });
+    };
+    if (hexEditSession.local && hasSidebarLocalImage()) {
+      msg.buffer = imageLocalBuffer.buffer.slice(
+        imageLocalBuffer.byteOffset,
+        imageLocalBuffer.byteOffset + imageLocalBuffer.byteLength
+      );
+      msg.filename = imageLocalFilename || "image";
+      msg.contentType = mimeFromImageFilename(imageLocalFilename);
+    } else if (hexEditSession.url) {
+      msg.url = hexEditSession.url;
+    } else {
+      if (els.imageHexEditStatus) {
+        els.imageHexEditStatus.textContent = "No image source for patch.";
+      }
+      return;
+    }
+    const result = await browser.runtime.sendMessage(msg);
     if (!result || !result.ok || !result.base64) {
       if (els.imageHexEditStatus) {
         els.imageHexEditStatus.textContent =
@@ -4279,7 +4853,13 @@ function downloadPatchedHex() {
 }
 
 async function runImageHex(imageUrl, opts) {
-  if (!imageUrl) return;
+  const payload =
+    imageUrl && /^https?:\/\//i.test(imageUrl) ? { url: imageUrl } : imageAnalyzePayload();
+  if (!payload) {
+    focusImagePanel();
+    setImageForensicsStatus("Drop or capture an image first.");
+    return;
+  }
   const focusSplit = !!(opts && opts.focusSplit);
   focusImagePanel();
   if (els.imageHexPanel) els.imageHexPanel.hidden = false;
@@ -4302,14 +4882,18 @@ async function runImageHex(imageUrl, opts) {
   try {
     const result = await browser.runtime.sendMessage({
       type: MSG.IMAGE_HEX,
-      url: imageUrl,
+      ...payload,
     });
     renderImageHexResult(result || { ok: false, error: "No response" }, {
       focusSplit,
     });
     // Light meta peek alongside hex when available
     if (result && result.ok && result.metaFields) {
-      renderImageMetaResult({ ok: true, fields: result.metaFields, url: imageUrl });
+      renderImageMetaResult({
+        ok: true,
+        fields: result.metaFields,
+        url: result.url || imageUrl || imageLocalFilename,
+      });
     }
   } catch (_err) {
     renderImageHexResult({ ok: false, error: "Hex analysis failed." });
@@ -4353,7 +4937,12 @@ function renderImageMetaResult(result) {
 }
 
 async function runImageMeta(imageUrl) {
-  if (!imageUrl) return;
+  const payload =
+    imageUrl && /^https?:\/\//i.test(imageUrl) ? { url: imageUrl } : imageAnalyzePayload();
+  if (!payload) {
+    setImageForensicsStatus("Drop or capture an image first.");
+    return;
+  }
   focusImagePanel();
   if (els.imageMetaPanel) els.imageMetaPanel.hidden = false;
   if (els.imageMetaStatus) els.imageMetaStatus.textContent = "Fetching metadata…";
@@ -4362,7 +4951,7 @@ async function runImageMeta(imageUrl) {
   try {
     const result = await browser.runtime.sendMessage({
       type: MSG.IMAGE_META,
-      url: imageUrl,
+      ...payload,
     });
     renderImageMetaResult(result || { ok: false, error: "No response" });
   } catch (_err) {
@@ -4738,55 +5327,81 @@ async function copyText(text) {
 
 if (els.btnImageOpen) {
   els.btnImageOpen.addEventListener("click", () => {
-    if (currentImage) openUrl(currentImage.url);
+    if (!currentImage) return;
+    const url = publicImageUrl() || imagePreviewObjectUrl;
+    if (url) openUrl(url);
+    else setImageForensicsStatus("No URL — local file only");
   });
 }
 if (els.btnImageCopy) {
   els.btnImageCopy.addEventListener("click", async () => {
     if (!currentImage) return;
-    const ok = await copyText(currentImage.url);
-    if (els.imageEmpty) {
-      /* brief status via badge title */
+    const text = publicImageUrl() || currentImage.filename || "";
+    if (!text) {
+      setImageForensicsStatus("Local file has no URL — use Open for blob preview");
+      return;
     }
+    const ok = await copyText(text);
     els.btnImageCopy.textContent = ok ? "Copied" : "Copy failed";
     setTimeout(() => {
-      els.btnImageCopy.textContent = "Copy URL";
+      els.btnImageCopy.textContent = publicImageUrl() ? "Copy URL" : "Copy name";
     }, 1200);
   });
 }
 if (els.btnImageLens) {
   els.btnImageLens.addEventListener("click", () => {
-    if (currentImage) openUrl(reverseSearchUrls(currentImage.url).lens);
+    const url = publicImageUrl();
+    if (!url) {
+      setImageForensicsStatus("Reverse search needs a public http(s) URL");
+      return;
+    }
+    openUrl(reverseSearchUrls(url).lens);
   });
 }
 if (els.btnImageYandex) {
   els.btnImageYandex.addEventListener("click", () => {
-    if (currentImage) openUrl(reverseSearchUrls(currentImage.url).yandex);
+    const url = publicImageUrl();
+    if (!url) {
+      setImageForensicsStatus("Reverse search needs a public http(s) URL");
+      return;
+    }
+    openUrl(reverseSearchUrls(url).yandex);
   });
 }
 if (els.btnImageTineye) {
   els.btnImageTineye.addEventListener("click", () => {
-    if (currentImage) openUrl(reverseSearchUrls(currentImage.url).tineye);
+    const url = publicImageUrl();
+    if (!url) {
+      setImageForensicsStatus("Reverse search needs a public http(s) URL");
+      return;
+    }
+    openUrl(reverseSearchUrls(url).tineye);
   });
 }
 if (els.btnImageForensics) {
   els.btnImageForensics.addEventListener("click", () => {
-    if (currentImage) runImageForensics(currentImage.url);
+    if (!currentImage) return;
+    runLocalImageEla();
+  });
+}
+if (els.btnImageForensicsExternal) {
+  els.btnImageForensicsExternal.addEventListener("click", () => {
+    runImageForensics(publicImageUrl() || null);
   });
 }
 if (els.btnImageStegstruck) {
   els.btnImageStegstruck.addEventListener("click", () => {
-    if (currentImage) runStegStruckScan(currentImage.url);
+    if (currentImage) runStegStruckScan(publicImageUrl() || null);
   });
 }
 if (els.btnImageHex) {
   els.btnImageHex.addEventListener("click", () => {
-    if (currentImage) runImageHex(currentImage.url);
+    if (currentImage) runImageHex(publicImageUrl() || null);
   });
 }
 if (els.btnImageSplit) {
   els.btnImageSplit.addEventListener("click", () => {
-    if (currentImage) runImageHex(currentImage.url, { focusSplit: true });
+    if (currentImage) runImageHex(publicImageUrl() || null, { focusSplit: true });
   });
 }
 if (els.btnHexApply) {
@@ -4806,7 +5421,22 @@ if (els.btnHexDownload) {
 }
 if (els.btnImageMeta) {
   els.btnImageMeta.addEventListener("click", () => {
-    if (currentImage) runImageMeta(currentImage.url);
+    if (currentImage) runImageMeta(publicImageUrl() || null);
+  });
+}
+if (els.btnImageEla) {
+  els.btnImageEla.addEventListener("click", () => {
+    if (currentImage) runLocalImageEla();
+  });
+}
+if (els.btnImageLsb) {
+  els.btnImageLsb.addEventListener("click", () => {
+    if (currentImage) runLocalImageLsb();
+  });
+}
+if (els.btnImageChannels) {
+  els.btnImageChannels.addEventListener("click", () => {
+    if (currentImage) runLocalImageChannels();
   });
 }
 if (els.btnImageCopyFallback) {
@@ -4856,6 +5486,366 @@ if (els.btnImageProbe) {
 // ---------------------------------------------------------------------------
 // Audio Asset
 // ---------------------------------------------------------------------------
+
+const MediaLocalApi = typeof MediaLocal !== "undefined" ? MediaLocal : null;
+const ImageLocalApi = typeof ImageLocal !== "undefined" ? ImageLocal : null;
+
+async function prefetchAudioBytesForLocalTools() {
+  if (audioLocalBuffer && audioLocalBuffer.byteLength) {
+    return audioLocalBuffer.byteLength <= AUDIO_LOCAL_MAX_BYTES;
+  }
+  if (audioPreviewObjectUrl && /^blob:/i.test(audioPreviewObjectUrl)) {
+    try {
+      const res = await fetch(audioPreviewObjectUrl);
+      const buf = await res.arrayBuffer();
+      if (buf.byteLength > AUDIO_LOCAL_MAX_BYTES) return false;
+      audioLocalBuffer = new Uint8Array(buf);
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+  if (!currentAudio || !currentAudio.url || !/^https?:\/\//i.test(currentAudio.url)) {
+    return false;
+  }
+  try {
+    try {
+      const head = await fetch(currentAudio.url, {
+        method: "HEAD",
+        credentials: "omit",
+        cache: "no-store",
+      });
+      if (head.ok) {
+        const cl = Number(head.headers.get("content-length") || 0);
+        if (cl > AUDIO_LOCAL_MAX_BYTES) return false;
+      }
+    } catch (_err) {
+      /* HEAD optional */
+    }
+    const res = await fetch(currentAudio.url, { credentials: "omit", cache: "no-store" });
+    if (!res.ok) return false;
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > AUDIO_LOCAL_MAX_BYTES) return false;
+    audioLocalBuffer = new Uint8Array(buf);
+    audioLocalFilename =
+      currentAudio.filename ||
+      (() => {
+        try {
+          const u = new URL(currentAudio.url);
+          return (u.pathname.split("/").pop() || "audio").split("?")[0];
+        } catch (_err2) {
+          return "audio";
+        }
+      })();
+    return true;
+  } catch (_err) {
+    return false;
+  }
+}
+
+function scheduleAutoSpectrogram() {
+  prefetchAudioBytesForLocalTools()
+    .then((ok) => {
+      if (ok) runLocalSpectrogram();
+    })
+    .catch(() => {});
+}
+
+async function prefetchImageForLocalTools() {
+  if (hasSidebarLocalImage()) return true;
+  const url = publicImageUrl();
+  if (!url) return false;
+  try {
+    const res = await fetch(url, { credentials: "omit", cache: "no-store" });
+    if (!res.ok) return false;
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > 16 * 1024 * 1024) return false;
+    imageLocalBuffer = new Uint8Array(buf);
+    try {
+      const u = new URL(url);
+      imageLocalFilename = (u.pathname.split("/").pop() || "image").split("?")[0];
+    } catch (_err) {
+      imageLocalFilename = "image.jpg";
+    }
+    const mime = mimeFromImageFilename(imageLocalFilename);
+    setImagePreviewFromBlob(new Blob([imageLocalBuffer], { type: mime }), url);
+    return true;
+  } catch (_err) {
+    return false;
+  }
+}
+
+async function getAudioArrayBufferForLocalTools() {
+  const ok = await prefetchAudioBytesForLocalTools();
+  if (!ok || !audioLocalBuffer || !audioLocalBuffer.byteLength) return null;
+  return audioLocalBuffer.buffer.slice(
+    audioLocalBuffer.byteOffset,
+    audioLocalBuffer.byteOffset + audioLocalBuffer.byteLength
+  );
+}
+
+function setAudioLocalStatus(text) {
+  if (els.audioLocalStatus) els.audioLocalStatus.textContent = text || "";
+}
+
+function showAudioLocalPanel() {
+  if (els.audioLocalPanel) els.audioLocalPanel.hidden = false;
+  focusAudioPanel();
+}
+
+async function runLocalSstvDecode() {
+  if (!MediaLocalApi || !els.audioSstvCanvas) return;
+  showAudioLocalPanel();
+  setAudioLocalStatus("Loading audio for SSTV…");
+  try {
+    const buf = await getAudioArrayBufferForLocalTools();
+    if (!buf) {
+      setAudioLocalStatus("Drop or capture audio first (http URL or local file).");
+      return;
+    }
+    setAudioLocalStatus("Decoding SSTV (experimental)…");
+    const res = await MediaLocalApi.decodeSstvScottieS1(buf, els.audioSstvCanvas);
+    if (!res.ok) {
+      setAudioLocalStatus(res.error || "SSTV decode failed");
+      return;
+    }
+    if (els.audioSstvWrap) els.audioSstvWrap.hidden = false;
+    setAudioLocalStatus(
+      (res.mode || "SSTV") + " · " + (res.width || "?") + "×" + (res.height || "?")
+    );
+  } catch (err) {
+    setAudioLocalStatus((err && err.message) || "SSTV decode failed");
+  }
+}
+
+function audioMorseTextForDcode() {
+  if (els.audioMorseLocalText && els.audioMorseLocalText.textContent) {
+    return els.audioMorseLocalText.textContent.trim();
+  }
+  if (els.audioMorseList) {
+    const li = els.audioMorseList.querySelector("li");
+    if (li && li.textContent) return li.textContent.trim();
+  }
+  return "";
+}
+
+async function runLocalSpectrogram() {
+  if (!MediaLocalApi || !els.audioSpectrogramCanvas) return;
+  showAudioLocalPanel();
+  setAudioLocalStatus("Loading audio…");
+  try {
+    const buf = await getAudioArrayBufferForLocalTools();
+    if (!buf) {
+      setAudioLocalStatus("Drop or capture audio first (http URL or local file).");
+      return;
+    }
+    setAudioLocalStatus("Rendering spectrogram…");
+    els.audioSpectrogramCanvas.width = 640;
+    els.audioSpectrogramCanvas.height = 200;
+    const res = await MediaLocalApi.renderSpectrogram(buf, els.audioSpectrogramCanvas, {
+      maxSeconds: 90,
+    });
+    if (!res.ok) {
+      setAudioLocalStatus(res.error || "Spectrogram failed");
+      return;
+    }
+    if (els.audioSpectrogramWrap) els.audioSpectrogramWrap.hidden = false;
+    setAudioLocalStatus(
+      "Spectrogram · " + (res.duration || 0).toFixed(1) + "s @ " + (res.sampleRate || "?") + " Hz"
+    );
+  } catch (err) {
+    setAudioLocalStatus((err && err.message) || "Spectrogram failed");
+  }
+}
+
+async function runLocalMorseDecode() {
+  if (!MediaLocalApi) return;
+  showAudioLocalPanel();
+  setAudioLocalStatus("Loading audio…");
+  try {
+    const buf = await getAudioArrayBufferForLocalTools();
+    if (!buf) {
+      setAudioLocalStatus("Drop or capture audio first.");
+      return;
+    }
+    setAudioLocalStatus("Decoding Morse from audio…");
+    const res = await MediaLocalApi.decodeMorseFromAudio(buf);
+    if (els.audioMorseLocalWrap) els.audioMorseLocalWrap.hidden = false;
+    if (els.audioMorseLocalText) {
+      els.audioMorseLocalText.textContent = res.ok ? res.text : "(no clear decode)";
+    }
+    if (els.audioMorseLocalRaw) {
+      els.audioMorseLocalRaw.textContent = res.raw ? "Raw: " + res.raw : res.error || "";
+    }
+    setAudioLocalStatus(
+      res.ok
+        ? "Morse decode OK — click text to send to Cipher"
+        : res.error || "Weak/no Morse — try Spectrogram or dCode"
+    );
+    if (res.ok && els.audioMorseLocalText) {
+      els.audioMorseLocalText.style.cursor = "pointer";
+      els.audioMorseLocalText.title = "Click → Cipher Clipboard";
+      els.audioMorseLocalText.onclick = () => sendTextToCipher(res.text);
+    }
+  } catch (err) {
+    setAudioLocalStatus((err && err.message) || "Morse decode failed");
+  }
+}
+
+function setImageLocalStatus(text) {
+  if (els.imageLocalStatus) els.imageLocalStatus.textContent = text || "";
+}
+
+function showImageLocalPanel() {
+  if (els.imageLocalPanel) els.imageLocalPanel.hidden = false;
+  focusImagePanel();
+}
+
+async function getImageSourceForLocalTools() {
+  const httpUrl = publicImageUrl();
+  if (httpUrl) return httpUrl;
+  if (hasSidebarLocalImage()) {
+    const mime = mimeFromImageFilename(imageLocalFilename || currentImage?.filename);
+    return new Blob([imageLocalBuffer], { type: mime });
+  }
+  if (imagePreviewObjectUrl) return imagePreviewObjectUrl;
+  return null;
+}
+
+function elaQualityValue() {
+  return Number(els.imageElaQuality && els.imageElaQuality.value ? els.imageElaQuality.value : 90) / 100;
+}
+
+function elaScaleValue() {
+  return Number(els.imageElaScale && els.imageElaScale.value ? els.imageElaScale.value : 20);
+}
+
+let elaSliderTimer = null;
+
+function scheduleElaRepaint() {
+  if (elaSliderTimer) clearTimeout(elaSliderTimer);
+  elaSliderTimer = setTimeout(() => {
+    refreshElaFromSliders().catch(() => {});
+  }, 80);
+}
+
+async function refreshElaFromSliders() {
+  if (!ImageLocalApi || !els.imageElaCanvas) return;
+  const quality = elaQualityValue();
+  const amplify = elaScaleValue();
+  if (els.imageElaQualityVal) {
+    els.imageElaQualityVal.textContent = String(Math.round(quality * 100));
+  }
+  if (els.imageElaScaleVal) {
+    els.imageElaScaleVal.textContent = String(Math.round(amplify));
+  }
+  const res = await ImageLocalApi.repaintEla(els.imageElaCanvas, { quality, amplify });
+  if (!res.ok) {
+    setImageLocalStatus(res.error || "ELA update failed");
+    return;
+  }
+  setImageLocalStatus(
+    "ELA · Q" +
+      Math.round(quality * 100) +
+      " × scale " +
+      Math.round(amplify) +
+      " · " +
+      res.width +
+      "×" +
+      res.height
+  );
+}
+
+async function runLocalImageEla() {
+  if (!ImageLocalApi || !els.imageElaCanvas) return;
+  if (!currentImage && !hasSidebarLocalImage()) {
+    setImageLocalStatus("Drop or capture an image first.");
+    return;
+  }
+  showImageLocalPanel();
+  setImageLocalStatus("Loading image…");
+  const loaded = await prefetchImageForLocalTools();
+  const src = await getImageSourceForLocalTools();
+  if (!loaded || !src) {
+    setImageLocalStatus("Could not load image — drop the file locally if URL fetch fails.");
+    return;
+  }
+  setImageLocalStatus("Running ELA…");
+  const quality = elaQualityValue();
+  const amplify = elaScaleValue();
+  const res = await ImageLocalApi.renderEla(src, els.imageElaCanvas, { quality, amplify });
+  if (!res.ok) {
+    setImageLocalStatus(res.error || "ELA failed");
+    return;
+  }
+  if (els.imageElaWrap) els.imageElaWrap.hidden = false;
+  if (els.imageElaControls) els.imageElaControls.hidden = false;
+  if (els.imageElaQualityVal) {
+    els.imageElaQualityVal.textContent = String(Math.round(quality * 100));
+  }
+  if (els.imageElaScaleVal) {
+    els.imageElaScaleVal.textContent = String(Math.round(amplify));
+  }
+  setImageLocalStatus(
+    (res.note || "ELA complete") +
+      " · Q" +
+      Math.round(quality * 100) +
+      " × " +
+      Math.round(amplify) +
+      " · " +
+      res.width +
+      "×" +
+      res.height
+  );
+}
+
+if (els.imageElaQuality) {
+  els.imageElaQuality.addEventListener("input", scheduleElaRepaint);
+}
+if (els.imageElaScale) {
+  els.imageElaScale.addEventListener("input", scheduleElaRepaint);
+}
+if (els.btnImageForensically) {
+  els.btnImageForensically.addEventListener("click", () => {
+    openForensicallyFromSidebar("error-level-analysis");
+  });
+}
+
+async function runLocalImageLsb() {
+  if (!ImageLocalApi || !els.imageLsbWrap) return;
+  const src = await getImageSourceForLocalTools();
+  if (!src) {
+    setImageLocalStatus("Drop or capture an image first.");
+    return;
+  }
+  showImageLocalPanel();
+  setImageLocalStatus("Rendering LSB planes…");
+  const res = await ImageLocalApi.renderLsb(src, els.imageLsbWrap);
+  if (!res.ok) {
+    setImageLocalStatus(res.error || "LSB failed");
+    return;
+  }
+  els.imageLsbWrap.hidden = false;
+  setImageLocalStatus("LSB bit planes (R/G/B bits 0–1)");
+}
+
+async function runLocalImageChannels() {
+  if (!ImageLocalApi || !els.imageChannelsWrap) return;
+  const src = await getImageSourceForLocalTools();
+  if (!src) {
+    setImageLocalStatus("Drop or capture an image first.");
+    return;
+  }
+  showImageLocalPanel();
+  setImageLocalStatus("Splitting RGB channels…");
+  const res = await ImageLocalApi.renderChannelSplit(src, els.imageChannelsWrap);
+  if (!res.ok) {
+    setImageLocalStatus(res.error || "Channel split failed");
+    return;
+  }
+  els.imageChannelsWrap.hidden = false;
+  setImageLocalStatus("RGB channel split");
+}
 
 if (els.audioPreview) {
   els.audioPreview.addEventListener("error", () => {
@@ -4945,10 +5935,30 @@ if (els.btnAudioSpectrum) {
   els.btnAudioSpectrum.addEventListener("click", () => openAudioDeepTool(audioTools.spectrum));
 }
 if (els.btnAudioMorse) {
-  els.btnAudioMorse.addEventListener("click", () => openAudioDeepTool(audioTools.morse));
+  els.btnAudioMorse.addEventListener("click", () => {
+    const morseText = audioMorseTextForDcode();
+    browser.runtime
+      .sendMessage({
+        type: MSG.DCODE_OPEN,
+        url: audioTools.morse,
+        text: morseText,
+      })
+      .catch(() => openAudioDeepTool(audioTools.morse));
+    setAudioStatus(
+      morseText
+        ? "Opening dCode Morse with decoded dots/dashes filled in"
+        : "Opening dCode Morse — decode audio in-panel first or paste Morse manually"
+    );
+  });
 }
 if (els.btnAudioSstv) {
-  els.btnAudioSstv.addEventListener("click", () => openAudioDeepTool(audioTools.sstv));
+  els.btnAudioSstv.addEventListener("click", () => runLocalSstvDecode());
+}
+if (els.btnAudioSpectrogram) {
+  els.btnAudioSpectrogram.addEventListener("click", () => runLocalSpectrogram());
+}
+if (els.btnAudioMorseLocal) {
+  els.btnAudioMorseLocal.addEventListener("click", () => runLocalMorseDecode());
 }
 
 if (els.audioFile) {
@@ -4986,6 +5996,45 @@ if (els.audioDrop) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       if (els.audioFile) els.audioFile.click();
+    }
+  });
+}
+
+if (els.imageFile) {
+  els.imageFile.addEventListener("change", () => {
+    const file = els.imageFile.files && els.imageFile.files[0];
+    if (file) analyzeImageLocally(file);
+    els.imageFile.value = "";
+  });
+}
+
+if (els.imageDrop) {
+  ["dragenter", "dragover"].forEach((evt) => {
+    els.imageDrop.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      els.imageDrop.classList.add("is-dragover");
+    });
+  });
+  ["dragleave", "drop"].forEach((evt) => {
+    els.imageDrop.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (evt === "dragleave") els.imageDrop.classList.remove("is-dragover");
+    });
+  });
+  els.imageDrop.addEventListener("drop", (e) => {
+    els.imageDrop.classList.remove("is-dragover");
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) analyzeImageLocally(file);
+  });
+  els.imageDrop.addEventListener("click", () => {
+    if (els.imageFile) els.imageFile.click();
+  });
+  els.imageDrop.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (els.imageFile) els.imageFile.click();
     }
   });
 }
@@ -5141,8 +6190,25 @@ if (els.btnPinHunt) {
   });
 }
 
-if (els.btnClearHunt) {
-  els.btnClearHunt.addEventListener("click", async () => {
+async function clearProbeSearch() {
+  try {
+    await browser.runtime.sendMessage({ type: MSG.CANCEL_PROBE });
+  } catch (_err) {
+    /* ignore */
+  }
+  if (els.probeInput) els.probeInput.value = "";
+  renderProbe(null);
+  if (els.probeActions) els.probeActions.hidden = true;
+}
+
+if (els.btnClearProbe) {
+  els.btnClearProbe.addEventListener("click", () => {
+    clearProbeSearch();
+  });
+}
+
+if (els.btnUnpinHunt) {
+  els.btnUnpinHunt.addEventListener("click", async () => {
     try {
       await browser.runtime.sendMessage({ type: MSG.CLEAR_HUNT_BASE });
       renderHuntBase(null);
@@ -5170,6 +6236,82 @@ if (els.btnRobots) {
   els.btnRobots.addEventListener("click", () => {
     fetchSiteDiscovery().catch(() => {});
   });
+}
+
+if (els.btnScanSource) {
+  els.btnScanSource.addEventListener("click", () => {
+    scanPageSource().catch(() => {});
+  });
+}
+
+if (els.btnIdRouter) {
+  els.btnIdRouter.addEventListener("click", () => renderIdRouter());
+}
+if (els.idRouterInput) {
+  els.idRouterInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      renderIdRouter();
+    }
+  });
+}
+
+if (els.btnPasteFetch) {
+  els.btnPasteFetch.addEventListener("click", () => {
+    if (els.pasteInput) fetchPasteContent(els.pasteInput.value);
+  });
+}
+if (els.pasteInput) {
+  els.pasteInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      fetchPasteContent(els.pasteInput.value);
+    }
+  });
+}
+
+if (els.btnVideoMeta) {
+  els.btnVideoMeta.addEventListener("click", () => loadVideoMeta());
+}
+if (els.videoInput) {
+  els.videoInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      loadVideoMeta();
+    }
+  });
+}
+
+if (els.commentWorkspace) {
+  let cwTimer = 0;
+  els.commentWorkspace.addEventListener("input", () => {
+    if (cwTimer) clearTimeout(cwTimer);
+    cwTimer = setTimeout(() => {
+      renderCommentWorkspaceChips();
+      browser.storage.session
+        .set({ commentWorkspace: els.commentWorkspace.value })
+        .catch(() => {});
+    }, 350);
+  });
+  browser.storage.session.get("commentWorkspace").then((bag) => {
+    if (bag.commentWorkspace && !els.commentWorkspace.value) {
+      els.commentWorkspace.value = bag.commentWorkspace;
+      renderCommentWorkspaceChips();
+    }
+  });
+}
+
+if (els.btnCipherQuipqiup) {
+  els.btnCipherQuipqiup.addEventListener("click", () => openCipherDeepLink("quipqiup"));
+}
+if (els.btnCipherDcode) {
+  els.btnCipherDcode.addEventListener("click", () => openCipherDeepLink("dcode"));
+}
+if (els.btnCipherCyberchef) {
+  els.btnCipherCyberchef.addEventListener("click", () => openCipherDeepLink("cyberchef"));
+}
+if (els.btnCipherCli) {
+  els.btnCipherCli.addEventListener("click", () => runHuntCliDecode());
 }
 
 els.cipherInput.addEventListener("input", () => {
@@ -5675,8 +6817,49 @@ browser.runtime.onMessage.addListener((message) => {
     return;
   }
 
+  if (message.type === MSG.HUNT_PROBE_START) {
+    if (message.toast) showIngestToast(message.toast, { mode: "probing" });
+    if (message.token && els.probeStatus) {
+      els.probeStatus.textContent = "Auto-probe: /" + message.token + " …";
+    }
+    return;
+  }
+
+  if (message.type === MSG.HUNT_PROBE_MISS) {
+    if (message.toast) showIngestToast(message.toast, { mode: "miss" });
+    if (message.token && confirmedHuntHits) {
+      /* keep hit set unchanged */
+    }
+    if (els.probeStatus && message.token) {
+      els.probeStatus.textContent = "No hunt hit for /" + message.token;
+    }
+    return;
+  }
+
+  if (message.type === MSG.HUNT_PROBE_HIT) {
+    if (message.toast) showIngestToast(message.toast, { mode: "hit" });
+    flashHuntHitBadge();
+    if (message.token) confirmedHuntHits.add(String(message.token).trim().toLowerCase());
+    if (els.probeStatus && message.toast) {
+      els.probeStatus.textContent = message.toast;
+    }
+    focusProbePanel();
+    return;
+  }
+
+  if (message.type === MSG.ID_ROUTER_INPUT && message.text) {
+    focusIdRouterPanel(message.text);
+    return;
+  }
+
+  if (message.type === MSG.PASTE_OPEN && (message.url || message.text)) {
+    openPastePanel(message.url || message.text);
+    return;
+  }
+
   if (message.type === MSG.PROBE_PROGRESS || message.type === MSG.PROBE_RESULT) {
     if (message.probe) renderProbe(message.probe, { focus: true });
+    else if (message.type === MSG.PROBE_RESULT) renderProbe(null);
     return;
   }
 
@@ -5719,7 +6902,10 @@ browser.runtime.onMessage.addListener((message) => {
 
   if (message.type === MSG.IMAGE_FORENSICS) {
     if (message.imageAsset) {
-      renderImageAsset(message.imageAsset, { focus: true });
+      renderImageAsset(message.imageAsset, {
+        focus: true,
+        autoEla: Boolean(message.runLocalEla),
+      });
     }
     if (message.stegstruck) {
       const s = message.stegstruck;
@@ -5729,6 +6915,9 @@ browser.runtime.onMessage.addListener((message) => {
           : s.error || "StegStruck failed",
         { showCopyFallback: false }
       );
+      return;
+    }
+    if (message.runLocalEla) {
       return;
     }
     const url = message.copyUrl || (message.imageAsset && message.imageAsset.url) || "";
@@ -6040,6 +7229,486 @@ function resolveGeohashInput() {
   els.geohashResults.appendChild(card);
 }
 
+// ---------------------------------------------------------------------------
+// ID router, paste, source scan, video lane, checklist
+// ---------------------------------------------------------------------------
+
+function focusIdRouterPanel(prefill) {
+  focusPanel("panel-id-router");
+  if (els.idRouterInput && prefill) els.idRouterInput.value = String(prefill).trim();
+  if (els.idRouterInput) els.idRouterInput.focus();
+  if (prefill) renderIdRouter(prefill);
+}
+
+function focusVideoPanel(url) {
+  focusPanel("panel-video");
+  if (els.videoInput && url) els.videoInput.value = String(url).trim();
+  if (url) loadVideoMeta(url);
+}
+
+function openPastePanel(raw) {
+  focusPanel("panel-paste");
+  if (els.pasteInput) els.pasteInput.value = String(raw || "").trim();
+  if (raw) fetchPasteContent(String(raw).trim());
+}
+
+function openArchiveHelper(raw) {
+  const t = String(raw || "").trim();
+  if (/archive\.org\/details\//i.test(t)) {
+    openUrl(t);
+    openUrl(
+      "https://archive.org/search?query=" +
+        encodeURIComponent(t.split("/details/")[1] || "")
+    );
+    return;
+  }
+  if (IR) {
+    const hits = IR.matchIdPatternsBest(t);
+    const isbn = hits.find((h) => h.id === "isbn");
+    if (isbn && isbn.links[0]) openUrl(isbn.links[0].url);
+  }
+}
+
+function renderIdRouter(raw) {
+  if (!els.idRouterResults) return;
+  const text = String(raw || (els.idRouterInput && els.idRouterInput.value) || "").trim();
+  els.idRouterResults.replaceChildren();
+  if (!text) {
+    if (els.idRouterStatus) els.idRouterStatus.textContent = "Paste a token or string.";
+    return;
+  }
+  const hits = IR ? IR.matchIdPatternsBest(text) : [];
+  const tags = classifyText(text, { hasHuntBase: hasHuntBasePinned });
+  if (!hits.length && !tags.length) {
+    if (els.idRouterStatus) els.idRouterStatus.textContent = "No known ID pattern — try Probe or hunt-site auto-probe.";
+    return;
+  }
+  if (els.idRouterStatus) {
+    els.idRouterStatus.textContent = hits.length
+      ? hits.length + " pattern(s) matched"
+      : "Classifier tags only";
+  }
+  for (const hit of hits) {
+    const card = document.createElement("div");
+    card.className = "id-router-card";
+    const title = document.createElement("p");
+    title.className = "mono";
+    title.textContent = hit.label + " · " + hit.token;
+    card.appendChild(title);
+    const actions = document.createElement("div");
+    actions.className = "image-actions";
+    for (const link of hit.links) {
+      if (!link.url) continue;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ghost-btn";
+      btn.textContent = link.label;
+      btn.addEventListener("click", () => openUrl(link.url));
+      actions.appendChild(btn);
+    }
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "ghost-btn";
+    copyBtn.textContent = "Copy";
+    copyBtn.addEventListener("click", () => copyText(hit.token));
+    const probeBtn = document.createElement("button");
+    probeBtn.type = "button";
+    probeBtn.className = "ghost-btn";
+    probeBtn.textContent = "Probe";
+    probeBtn.addEventListener("click", () => {
+      setProbeMode("id");
+      if (els.probeInput) els.probeInput.value = hit.token;
+      focusProbePanel();
+      startProbe();
+    });
+    actions.append(copyBtn, probeBtn);
+    card.appendChild(actions);
+    els.idRouterResults.appendChild(card);
+  }
+  if (tags.length) {
+    const li = document.createElement("div");
+    li.className = "id-router-card";
+    renderArtifactChips(li, text, { hasHuntBase: hasHuntBasePinned });
+    els.idRouterResults.appendChild(li);
+  }
+}
+
+async function fetchPasteContent(raw) {
+  if (!els.pasteStatus) return;
+  els.pasteStatus.textContent = "Fetching…";
+  if (els.pasteBody) els.pasteBody.hidden = true;
+  if (els.pasteWarning) els.pasteWarning.hidden = true;
+  if (els.pasteTags) {
+    els.pasteTags.hidden = true;
+    els.pasteTags.replaceChildren();
+  }
+  try {
+    const res = await browser.runtime.sendMessage({
+      type: MSG.FETCH_PASTE,
+      urlOrId: raw,
+      pageUrl: lastKnownPageUrl,
+    });
+    if (!res || !res.ok) {
+      els.pasteStatus.textContent = (res && res.error) || "Fetch failed";
+      return;
+    }
+    els.pasteStatus.textContent = res.url || "Fetched";
+    if (els.pasteBody) {
+      els.pasteBody.hidden = false;
+      els.pasteBody.textContent = res.body || "(empty)";
+    }
+    if (res.passwordWarning && els.pasteWarning) {
+      els.pasteWarning.hidden = false;
+      els.pasteWarning.textContent = res.passwordWarning;
+    }
+    const tags = res.tags || [];
+    if (tags.length && els.pasteTags) {
+      els.pasteTags.hidden = false;
+      for (const tag of tags) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "artifact-chip";
+        chip.textContent = "#" + tag;
+        chip.addEventListener("click", () => {
+          setProbeMode("id");
+          if (els.probeInput) els.probeInput.value = tag;
+          startProbe();
+        });
+        els.pasteTags.appendChild(chip);
+      }
+    }
+  } catch (_err) {
+    els.pasteStatus.textContent = "Fetch failed";
+  }
+}
+
+function renderSourceScan(scan) {
+  if (!scan) {
+    if (els.listSourceComments) fillList(els.listSourceComments, [], (x) => x);
+    if (els.listSourceHidden) fillList(els.listSourceHidden, [], (x) => x);
+    if (els.listSourceMeta) fillList(els.listSourceMeta, [], (x) => x);
+    if (els.countSourceComments) setCount(els.countSourceComments, 0);
+    if (els.countSourceHidden) setCount(els.countSourceHidden, 0);
+    if (els.countSourceMeta) setCount(els.countSourceMeta, 0);
+    return;
+  }
+  const mk = (items, source) =>
+    (items || []).map((t) => ({
+      text: t,
+      preview: t.length > 120 ? t.slice(0, 120) + "…" : t,
+      frame: "source",
+      source,
+    }));
+  const comments = mk(scan.comments, "source-comment");
+  const hidden = mk(scan.hidden, "source-hidden");
+  const meta = mk(scan.meta, "source-meta");
+  if (els.listSourceComments) {
+    fillList(els.listSourceComments, comments, (item) =>
+      assetCard(item.preview, item.frame, item.text, item.source, {
+        handoff: true,
+        source: "comment",
+      })
+    );
+  }
+  if (els.listSourceHidden) {
+    fillList(els.listSourceHidden, hidden, (item) =>
+      assetCard(item.preview, item.frame, item.text, item.source, { handoff: true })
+    );
+  }
+  if (els.listSourceMeta) {
+    fillList(els.listSourceMeta, meta, (item) =>
+      assetCard(item.preview, item.frame, item.text, item.source, { handoff: true })
+    );
+  }
+  if (els.countSourceComments) setCount(els.countSourceComments, comments.length);
+  if (els.countSourceHidden) setCount(els.countSourceHidden, hidden.length);
+  if (els.countSourceMeta) setCount(els.countSourceMeta, meta.length);
+}
+
+async function scanPageSource() {
+  if (els.scanStatus) els.scanStatus.textContent = "Scanning source…";
+  if (els.btnScanSource) els.btnScanSource.disabled = true;
+  try {
+    const res = await browser.runtime.sendMessage({
+      type: MSG.FETCH_PAGE_SOURCE,
+      pageUrl: lastKnownPageUrl,
+    });
+    if (!res || !res.ok) {
+      if (els.scanStatus) els.scanStatus.textContent = (res && res.error) || "Source scan failed";
+      return;
+    }
+    lastSourceScan = res.scan;
+    renderSourceScan(lastSourceScan);
+    if (els.scanStatus) {
+      els.scanStatus.textContent =
+        "Source scan OK · " +
+        (res.scan.comments || []).length +
+        " comments · " +
+        (res.scan.hidden || []).length +
+        " hidden";
+    }
+  } catch (_err) {
+    if (els.scanStatus) els.scanStatus.textContent = "Source scan failed";
+  } finally {
+    if (els.btnScanSource) els.btnScanSource.disabled = false;
+  }
+}
+
+async function loadVideoMeta(rawUrl) {
+  const url = String(rawUrl || (els.videoInput && els.videoInput.value) || "").trim();
+  if (!url) {
+    if (els.videoStatus) els.videoStatus.textContent = "Paste a video URL.";
+    return;
+  }
+  if (els.videoStatus) els.videoStatus.textContent = "Loading metadata…";
+  try {
+    const res = await browser.runtime.sendMessage({
+      type: MSG.FETCH_VIDEO_META,
+      url,
+    });
+    if (!els.videoMetaCard) return;
+    els.videoMetaCard.hidden = false;
+    els.videoMetaCard.replaceChildren();
+    if (!res || !res.ok) {
+      if (els.videoStatus) els.videoStatus.textContent = (res && res.error) || "Metadata failed";
+      return;
+    }
+    if (els.videoStatus) els.videoStatus.textContent = res.provider || "Video";
+    const title = document.createElement("p");
+    title.className = "mono";
+    title.textContent = res.title || url;
+    els.videoMetaCard.appendChild(title);
+    if (res.author) {
+      const author = document.createElement("p");
+      author.className = "status-hint";
+      author.textContent = res.author;
+      els.videoMetaCard.appendChild(author);
+    }
+    const actions = document.createElement("div");
+    actions.className = "image-actions";
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.className = "ghost-btn";
+    openBtn.textContent = "Open video";
+    openBtn.addEventListener("click", () => openUrl(url));
+    actions.appendChild(openBtn);
+    if (res.commentsUrl) {
+      const cBtn = document.createElement("button");
+      cBtn.type = "button";
+      cBtn.className = "ghost-btn";
+      cBtn.textContent = "Comments";
+      cBtn.addEventListener("click", () => openUrl(res.commentsUrl));
+      actions.appendChild(cBtn);
+    }
+    if (res.videoId) {
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "ghost-btn";
+      copyBtn.textContent = "Copy ID";
+      copyBtn.addEventListener("click", () => copyText(res.videoId));
+      const probeBtn = document.createElement("button");
+      probeBtn.type = "button";
+      probeBtn.className = "ghost-btn";
+      probeBtn.textContent = "Probe ID";
+      probeBtn.addEventListener("click", () => {
+        setProbeMode("id");
+        if (els.probeInput) els.probeInput.value = res.videoId;
+        startProbe();
+      });
+      actions.append(copyBtn, probeBtn);
+    }
+    els.videoMetaCard.appendChild(actions);
+  } catch (_err) {
+    if (els.videoStatus) els.videoStatus.textContent = "Metadata failed";
+  }
+}
+
+const CHECKLIST_ITEMS = [
+  "Pin hunt origin early — backlink format is {origin}/{slug}",
+  "Level / question title often matters — note it verbatim",
+  "Every hunt-page /slug: read visible text AND view-source (Scan source)",
+  "Every video: check comments + description + title (use Comment workspace if blocked)",
+  "Stuck on myth/history? try language / dictionary / translation",
+  "Stuck on creature/name? try homophone / second meaning of word",
+  "Password on paste? try concat prior flags, level titles, #rules, organizer bio",
+  "Ask mod one concrete rel? at a time — not vague theory dumps",
+  "Book hops: chapter title + page number — search inside archive preview",
+];
+
+const CHECKLIST_KEY = "crypticChecklistState";
+
+function initChecklist() {
+  if (!els.checklistItems) return;
+  els.checklistItems.replaceChildren();
+  browser.storage.local.get(CHECKLIST_KEY).then((bag) => {
+    const state = bag[CHECKLIST_KEY] || {};
+    CHECKLIST_ITEMS.forEach((text, i) => {
+      const li = document.createElement("li");
+      const label = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = Boolean(state["c" + i]);
+      cb.addEventListener("change", () => {
+        state["c" + i] = cb.checked;
+        browser.storage.local.set({ [CHECKLIST_KEY]: state }).catch(() => {});
+      });
+      const span = document.createElement("span");
+      span.textContent = text;
+      label.append(cb, span);
+      li.appendChild(label);
+      els.checklistItems.appendChild(li);
+    });
+  });
+}
+
+function renderCommentWorkspaceChips() {
+  if (!els.commentWorkspaceChips || !els.commentWorkspace) return;
+  els.commentWorkspaceChips.replaceChildren();
+  const text = (els.commentWorkspace.value || "").trim();
+  if (text.length < 4) return;
+  const li = document.createElement("div");
+  renderArtifactChips(li, text, { hasHuntBase: hasHuntBasePinned, source: "comment" });
+  els.commentWorkspaceChips.appendChild(li);
+}
+
+function pickDcodeUrl(text) {
+  const clean = stripHtmlForCipher(text);
+  if (AC && AC.looksLikeHodor && AC.looksLikeHodor(clean)) {
+    return "https://www.dcode.fr/hodor-language";
+  }
+  const guesses = guessCipherKinds(clean);
+  if (guesses.some((g) => g.id === "morse")) {
+    return "https://www.dcode.fr/morse-code";
+  }
+  return "https://www.dcode.fr/cipher-identifier";
+}
+
+function openDcodeTool(text) {
+  const payload = stripHtmlForCipher(text || "");
+  const url = pickDcodeUrl(payload);
+  const page = url.includes("hodor-language")
+    ? "Hodor Language"
+    : url.includes("morse-code")
+      ? "Morse Code"
+      : "Cipher Identifier";
+    setCipherCliStatus("Opening dCode " + page + "…", { ok: true });
+  browser.runtime
+    .sendMessage({ type: MSG.DCODE_OPEN, url, text: payload })
+    .then((res) => {
+      if (!res || !res.ok) {
+        setCipherCliStatus((res && res.error) || "Could not open dCode tab", { error: true });
+      }
+    })
+    .catch(() => {
+      setCipherCliStatus("dCode open failed", { error: true });
+    });
+}
+
+function openCipherDeepLink(tool) {
+  const text = (els.cipherInput && els.cipherInput.value) || "";
+  const clean = stripHtmlForCipher(text);
+  const payload = clean || text;
+  copyText(payload).catch(() => {});
+  if (tool === "dcode") {
+    openDcodeTool(payload);
+    return;
+  }
+  let url = "https://gchq.github.io/CyberChef/";
+  if (tool === "quipqiup") {
+    url =
+      "https://quipqiup.com/index.html#" +
+      encodeURIComponent(payload.slice(0, 500));
+  } else if (tool === "cyberchef") {
+    url =
+      "https://gchq.github.io/CyberChef/#recipe=From_Base64('A-Za-z0-9%2B/%3D')&input=" +
+      encodeURIComponent(payload.slice(0, 200));
+  }
+  openUrl(url);
+}
+
+function setCipherCliStatus(message, opts) {
+  if (!els.cipherCliStatus) return;
+  const o = opts || {};
+  els.cipherCliStatus.textContent = message || "";
+  els.cipherCliStatus.hidden = !message;
+  els.cipherCliStatus.classList.toggle("is-error", Boolean(o.error));
+  els.cipherCliStatus.classList.toggle("is-ok", Boolean(o.ok));
+}
+
+function renderCliDecodeCard(best, allResults) {
+  if (!els.cipherCards || !best || !best.text) return;
+  const existing = document.getElementById("cipher-card-cli");
+  if (existing) existing.remove();
+
+  const card = document.createElement("article");
+  card.className = "cipher-card is-cli-hit";
+  card.id = "cipher-card-cli";
+  card.dataset.cipherId = "cli";
+
+  const header = document.createElement("header");
+  const title = document.createElement("div");
+  title.className = "cipher-card-title";
+  const h3 = document.createElement("h3");
+  h3.textContent = "CLI decode · " + (best.tool || "auto");
+  title.appendChild(h3);
+  header.appendChild(title);
+  header.appendChild(copyButton(best.text));
+  card.appendChild(header);
+
+  const pre = document.createElement("pre");
+  pre.textContent = best.text;
+  card.appendChild(pre);
+
+  if (allResults && allResults.length > 1) {
+    const meta = document.createElement("div");
+    meta.className = "cipher-cli-meta";
+    const labels = allResults
+      .filter((r) => r && r.ok && r.text)
+      .map((r) => r.tool)
+      .join(", ");
+    if (labels) meta.textContent = "Also tried: " + labels;
+    card.appendChild(meta);
+  }
+
+  els.cipherCards.prepend(card);
+  focusCipherCard("cli");
+}
+
+async function runHuntCliDecode() {
+  const text = (els.cipherInput && els.cipherInput.value) || "";
+  if (!text.trim()) {
+    setCipherCliStatus("Paste ciphertext first.", { error: true });
+    focusCipherPanel({ focusInput: true });
+    return;
+  }
+  if (els.btnCipherCli) els.btnCipherCli.disabled = true;
+  setCipherCliStatus("Sending to hunt-cli…", {});
+  try {
+    const result = await browser.runtime.sendMessage({
+      type: MSG.HUNT_CLI_DECODE,
+      text,
+      tool: "auto",
+    });
+    if (!result || !result.ok) {
+      setCipherCliStatus((result && result.error) || "CLI decode failed", { error: true });
+      return;
+    }
+    const best = result.best || (result.decode && result.decode.best);
+    if (best && best.text) {
+      const via = result.transport === "native" ? "native" : result.transport === "http" ? "HTTP" : "cli";
+      const suffix = result.cipheyAvailable ? "" : " (no Ciphey — basic only)";
+      setCipherCliStatus("Decoded via " + (best.tool || "cli") + " [" + via + "]" + suffix, { ok: true });
+      renderCliDecodeCard(best, (result.decode && result.decode.results) || []);
+    } else {
+      setCipherCliStatus("No decode hit from hunt-cli", { error: true });
+    }
+  } catch (err) {
+    setCipherCliStatus((err && err.message) || "CLI decode failed", { error: true });
+  } finally {
+    if (els.btnCipherCli) els.btnCipherCli.disabled = false;
+  }
+}
+
 if (els.btnGeohash) {
   els.btnGeohash.addEventListener("click", () => resolveGeohashInput());
 }
@@ -6060,7 +7729,9 @@ loadPanelOrder();
 loadPanelOpenState();
 loadNotes();
 loadAutoIngestToggle();
+loadAutoProbeHuntToggle();
 loadCipherAutoDecode();
+initChecklist();
 loadCipherRotN().then(() => {
   if (els.cipherInput) renderCiphers(els.cipherInput.value);
 });
